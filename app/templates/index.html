@@ -1,0 +1,128 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - DynFlask{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Mensagens Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Formulário para Adicionar Novo Host -->
+        <div class="card card-primary card-outline mb-4">
+            <div class="card-header">
+                <h3 class="card-title">Adicionar Novo Host</h3>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_host') }}" method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="hostname">Hostname (e.g., sub.domain.com)</label>
+                            <input type="text" class="form-control" id="hostname" name="hostname" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="record_type">Tipo</label>
+                            <select class="form-control" id="record_type" name="record_type">
+                                <option value="A" selected>A (IPv4)</option>
+                                <option value="AAAA">AAAA (IPv6)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label for="ttl">TTL (segundos)</label>
+                            <input type="number" class="form-control" id="ttl" name="ttl" value="300" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Adicionar Host</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tabela de Hosts -->
+        <div class="card card-primary card-outline">
+            <div class="card-header">
+                <h3 class="card-title">Hosts Configurados</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Hostname</th>
+                                <th>IP Atual</th>
+                                <th>Tipo</th>
+                                <th>TTL</th>
+                                <th>Token</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for host in hosts %}
+                            <tr>
+                                <td>{{ host.hostname }}</td>
+                                <td>{{ host.current_ip or 'N/A' }}</td>
+                                <td>{{ host.record_type }}</td>
+                                <td>{{ host.ttl }}</td>
+                                <td><code class="user-select-all">{{ host.auth_token }}</code></td>
+                                <td>
+                                    <button class="btn btn-sm btn-warning" data-toggle="modal" data-target="#editModal-{{ host.id }}">Editar</button>
+                                    <form action="{{ url_for('delete_host', host_id=host.id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja excluir este host?')">Excluir</button>
+                                    </form>
+                                </td>
+                            </tr>
+
+                            <!-- Modal de Edição -->
+                            <div class="modal fade" id="editModal-{{ host.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Editar Host: {{ host.hostname }}</h5>
+                                            <button type="button" class="close" data-dismiss="modal">
+                                                <span>&times;</span>
+                                            </button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <form action="{{ url_for('edit_host', host_id=host.id) }}" method="POST">
+                                                <div class="form-group">
+                                                    <label for="hostname-{{ host.id }}">Hostname</label>
+                                                    <input type="text" class="form-control" id="hostname-{{ host.id }}" name="hostname" value="{{ host.hostname }}" required>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="record_type-{{ host.id }}">Tipo</label>
+                                                    <select class="form-control" id="record_type-{{ host.id }}" name="record_type">
+                                                        <option value="A" {% if host.record_type == 'A' %}selected{% endif %}>A (IPv4)</option>
+                                                        <option value="AAAA" {% if host.record_type == 'AAAA' %}selected{% endif %}>AAAA (IPv6)</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="ttl-{{ host.id }}">TTL</label>
+                                                    <input type="number" class="form-control" id="ttl-{{ host.id }}" name="ttl" value="{{ host.ttl }}" required>
+                                                </div>
+                                                <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

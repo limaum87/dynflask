@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+
+{% block title %}Configurações - DynFlask{% endblock %}
+
+{% block page_title %}Configurações{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- Mensagens Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="card card-primary card-outline">
+            <div class="card-header">
+                <h3 class="card-title">Configurações do Cloudflare</h3>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('settings') }}" method="POST">
+                    <div class="form-group">
+                        <label for="zone_id">Zone ID</label>
+                        <input type="text" class="form-control" id="zone_id" name="zone_id" value="{{ zone_id }}" required>
+                        <small class="form-text text-muted">O ID da sua zona (domínio) no Cloudflare.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="api_token">API Token</label>
+                        <input type="password" class="form-control" id="api_token" name="api_token">
+                        <small class="form-text text-muted">Deixe em branco para não alterar. O token deve ter permissão de `Zone:DNS:Edit`.</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

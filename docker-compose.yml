@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: dynflask-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - flask-app
+
+  flask-app:
+    build: .
+    container_name: dynflask-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    # A porta não é mais exposta para o host, apenas para a rede interna do Docker
+    # ports:
+    #   - "5000:5000"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    volumes:
+      - ./app:/app
+
+  mysql-db:
+    image: mysql:8.0
+    container_name: dynflask-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql-data:
