@@ -1,0 +1,57 @@
+{# Sidebar component #}
+<aside id="sidebar" class="sidebar-transition fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-slate-800 bg-slate-950 -translate-x-full lg:translate-x-0">
+  {# Logo #}
+  <div class="flex h-[60px] items-center gap-2.5 border-b border-slate-800/60 px-5">
+    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
+      <i data-lucide="globe" class="h-[18px] w-[18px] text-white"></i>
+    </div>
+    <span class="text-[17px] font-bold tracking-tight text-white">
+      Dyn<span class="text-blue-400">Flask</span>
+    </span>
+  </div>
+
+  {# User info #}
+  <div class="border-b border-slate-800/60 px-5 py-4">
+    <div class="flex items-center gap-3">
+      <div class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold text-slate-300">
+        {{ current_user.username[0] | upper }}
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-medium text-slate-200">{{ current_user.username }}</p>
+        <p class="text-[11px] text-slate-500">Administrador</p>
+      </div>
+    </div>
+  </div>
+
+  {# Navigation #}
+  <nav class="flex-1 space-y-1 px-3 py-4">
+    <a href="{{ url_for('index') }}"
+      class="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors {{
+        'bg-slate-800/80 text-white' if request.endpoint == 'index' else 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+      }}">
+      <i data-lucide="layout-dashboard" class="h-[18px] w-[18px] {{ 'text-blue-400' if request.endpoint == 'index' else 'text-slate-500 group-hover:text-slate-300' }}"></i>
+      Dashboard
+    </a>
+    <a href="{{ url_for('settings') }}"
+      class="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors {{
+        'bg-slate-800/80 text-white' if request.endpoint == 'settings' else 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+      }}">
+      <i data-lucide="settings" class="h-[18px] w-[18px] {{ 'text-blue-400' if request.endpoint == 'settings' else 'text-slate-500 group-hover:text-slate-300' }}"></i>
+      Configurações
+    </a>
+  </nav>
+
+  {# Footer #}
+  <div class="border-t border-slate-800/60 px-5 py-4">
+    <div class="flex items-center justify-between">
+      <span class="text-[11px] text-slate-600">v1.0.0</span>
+      <a href="{{ url_for('logout') }}" class="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-red-400 transition-colors" title="Sair">
+        <i data-lucide="log-out" class="h-3.5 w-3.5"></i>
+        Sair
+      </a>
+    </div>
+  </div>
+</aside>
+
+{# Sidebar overlay (mobile) #}
+<div id="sidebar-overlay" class="fixed inset-0 z-30 hidden bg-slate-900/60 backdrop-blur-sm lg:hidden" onclick="toggleSidebar()"></div>

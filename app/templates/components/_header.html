@@ -1,0 +1,25 @@
+{# Header component #}
+<header class="sticky top-0 z-20 flex h-[60px] items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur-md">
+  {# Left: mobile toggle + breadcrumb #}
+  <div class="flex items-center gap-4">
+    <button type="button" onclick="toggleSidebar()" class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors lg:hidden">
+      <i data-lucide="menu" class="h-[18px] w-[18px]"></i>
+    </button>
+    <div>
+      <h1 class="text-[15px] font-semibold text-slate-900">{% block page_title %}{% endblock %}</h1>
+    </div>
+  </div>
+
+  {# Right: actions #}
+  <div class="flex items-center gap-2">
+    <div class="hidden sm:flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+      <div class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800">
+        <span class="text-[10px] font-bold text-white">{{ current_user.username[0] | upper }}</span>
+      </div>
+      <span class="text-[13px] font-medium text-slate-700">{{ current_user.username }}</span>
+    </div>
+    <a href="{{ url_for('logout') }}" class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition-colors" title="Sair">
+      <i data-lucide="log-out" class="h-[16px] w-[16px]"></i>
+    </a>
+  </div>
+</header>

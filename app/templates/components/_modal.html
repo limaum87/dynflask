@@ -1,0 +1,47 @@
+{# Modal component — usage with caller #}
+{% macro modal(id, title='') %}
+<div id="{{ id }}" class="fixed inset-0 z-50 hidden">
+  <div class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-[2px]" onclick="closeModal('{{ id }}')"></div>
+  <div class="modal-dialog fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white shadow-xl">
+    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+      <h3 class="text-[15px] font-semibold text-slate-900">{{ title }}</h3>
+      <button type="button" onclick="closeModal('{{ id }}')" class="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+        <i data-lucide="x" class="h-4 w-4"></i>
+      </button>
+    </div>
+    <div class="p-6">
+      {{ caller() }}
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{# Confirm dialog variant #}
+{% macro confirm_dialog(id, title='', message='', confirm_label='Confirmar', cancel_label='Cancelar', form_action='', variant='destructive') %}
+<div id="{{ id }}" class="fixed inset-0 z-50 hidden">
+  <div class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-[2px]" onclick="closeModal('{{ id }}')"></div>
+  <div class="modal-dialog fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+    <div class="flex flex-col items-center text-center">
+      <div class="flex h-12 w-12 items-center justify-center rounded-full {{ 'bg-red-100' if variant == 'destructive' else 'bg-amber-100' }}">
+        <i data-lucide="{{ 'alert-triangle' if variant == 'destructive' else 'help-circle' }}" class="h-6 w-6 {{ 'text-red-600' if variant == 'destructive' else 'text-amber-600' }}"></i>
+      </div>
+      <h3 class="mt-4 text-base font-semibold text-slate-900">{{ title }}</h3>
+      <p class="mt-2 text-sm text-slate-500">{{ message }}</p>
+    </div>
+    <div class="mt-6 flex gap-3">
+      <button type="button" onclick="closeModal('{{ id }}')" class="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+        {{ cancel_label }}
+      </button>
+      {% if form_action %}
+      <form action="{{ form_action }}" method="POST" class="flex-1">
+      {% endif %}
+        <button type="{{ 'submit' if form_action else 'button' }}" onclick="{{ '' if form_action else "closeModal('" ~ id ~ "')" }}" class="flex-1 rounded-lg {{ 'bg-red-600 hover:bg-red-700 text-white' if variant == 'destructive' else 'bg-slate-900 hover:bg-slate-800 text-white' }} px-4 py-2.5 text-sm font-medium transition-colors">
+          {{ confirm_label }}
+        </button>
+      {% if form_action %}
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endmacro %}

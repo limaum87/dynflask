@@ -1,0 +1,71 @@
+/* DynFlask — Design Tokens */
+:root {
+  /* Primary */
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+
+  /* Backgrounds */
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  /* Muted */
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+
+  /* Borders */
+  --border: #e2e8f0;
+  --input-border: #cbd5e1;
+  --ring: #3b82f6;
+
+  /* Accent */
+  --accent: #3b82f6;
+  --accent-light: #dbeafe;
+  --accent-foreground: #1e40af;
+
+  /* Semantic */
+  --destructive: #ef4444;
+  --destructive-light: #fef2f2;
+  --success: #10b981;
+  --success-light: #ecfdf5;
+  --warning: #f59e0b;
+  --warning-light: #fffbeb;
+
+  /* Card */
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  /* Radius */
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* Sidebar */
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #94a3b8;
+  --sidebar-active: #ffffff;
+  --sidebar-hover-bg: #1e293b;
+  --sidebar-width: 260px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* Dark mode */
+.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --border: #1e293b;
+  --input-border: #334155;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+}

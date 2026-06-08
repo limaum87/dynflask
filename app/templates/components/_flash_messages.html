@@ -1,0 +1,26 @@
+{# Flash messages component #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="mb-6 space-y-3">
+    {% for category, message in messages %}
+    <div class="flash-enter flex items-center gap-3 rounded-lg border px-4 py-3 {{
+      'border-emerald-200 bg-emerald-50 text-emerald-800' if category == 'success' else
+      'border-red-200 bg-red-50 text-red-800' if category in ['error', 'danger'] else
+      'border-amber-200 bg-amber-50 text-amber-800' if category == 'warning' else
+      'border-blue-200 bg-blue-50 text-blue-800'
+    }}">
+      <i data-lucide="{{
+        'check-circle-2' if category == 'success' else
+        'x-circle' if category in ['error', 'danger'] else
+        'alert-triangle' if category == 'warning' else
+        'info'
+      }}" class="h-[18px] w-[18px] shrink-0"></i>
+      <p class="text-sm font-medium">{{ message }}</p>
+      <button type="button" onclick="this.parentElement.remove()" class="ml-auto shrink-0 rounded-md p-1 hover:bg-black/5 transition-colors">
+        <i data-lucide="x" class="h-3.5 w-3.5"></i>
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}

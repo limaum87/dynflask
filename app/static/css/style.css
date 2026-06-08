@@ -1,8 +1,96 @@
-/* Estilos personalizados podem ser adicionados aqui */
-body {
-    background-color: #f8f9fa;
+/* DynFlask — Custom Styles (Tailwind overrides) */
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.card-header {
-    background-color: #e9ecef;
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Sidebar transition */
+.sidebar-transition {
+  transition: transform var(--transition-slow), width var(--transition-slow);
+}
+
+/* Modal animation */
+.modal-backdrop {
+  animation: fadeIn var(--transition-fast);
+}
+
+.modal-dialog {
+  animation: scaleIn var(--transition-base);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Flash message animation */
+.flash-enter {
+  animation: slideDown var(--transition-base);
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Code token hover */
+.token-copy {
+  position: relative;
+  cursor: pointer;
+}
+
+.token-copy:hover {
+  background-color: #e2e8f0;
+}
+
+.token-copy .copy-tooltip {
+  display: none;
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.token-copy.copied .copy-tooltip {
+  display: block;
+}
+
+/* Focus ring */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ring);
+  border-color: var(--ring);
+}
+
+/* Print */
+@media print {
+  .no-print { display: none !important; }
 }

@@ -1,0 +1,18 @@
+{# Empty state component #}
+{% macro empty_state(icon='inbox', title='', description='', action_label='', action_url='') %}
+<div class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center">
+  <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+    <i data-lucide="{{ icon }}" class="h-8 w-8 text-slate-400"></i>
+  </div>
+  <h3 class="mt-5 text-base font-semibold text-slate-700">{{ title }}</h3>
+  {% if description %}
+  <p class="mt-1.5 max-w-sm text-sm text-slate-500">{{ description }}</p>
+  {% endif %}
+  {% if action_label and action_url %}
+  <a href="{{ action_url }}" class="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition-colors">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    {{ action_label }}
+  </a>
+  {% endif %}
+</div>
+{% endmacro %}
