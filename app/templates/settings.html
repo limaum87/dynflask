@@ -18,6 +18,7 @@
     {# ============================= #}
     {% call card(title='Cloudflare', description='Configure as credenciais de acesso à API do Cloudflare.', icon='cloud') %}
       <form action="{{ url_for('settings') }}" method="POST" class="space-y-5">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {# Status indicator #}
         <div class="flex items-center gap-2 rounded-lg {{
           'border border-emerald-200 bg-emerald-50' if 'cloudflare' in configured_providers else 'border border-slate-200 bg-slate-50'
@@ -90,6 +91,7 @@
     {# ============================= #}
     {% call card(title='AWS Route53', description='Configure as credenciais de acesso ao AWS Route53.', icon='server') %}
       <form action="{{ url_for('settings') }}" method="POST" class="space-y-5">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {# Status indicator #}
         <div class="flex items-center gap-2 rounded-lg {{
           'border border-emerald-200 bg-emerald-50' if 'route53' in configured_providers else 'border border-slate-200 bg-slate-50'

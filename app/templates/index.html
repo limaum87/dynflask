@@ -52,6 +52,7 @@
 {# Add Zone form #}
 {% call card(title='Adicionar Nova Zona', icon='plus-circle') %}
   <form action="{{ url_for('add_zone') }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div>
         <label for="name" class="mb-1.5 block text-sm font-medium text-slate-700">Nome da Zona</label>
@@ -168,6 +169,7 @@
     </div>
     <div class="p-6">
       <form id="edit-zone-form" action="" method="POST" class="space-y-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div>
           <label class="mb-1.5 block text-sm font-medium text-slate-700">Nome da Zona</label>
           <input type="text" id="edit-zone-name" name="name" required
@@ -206,6 +208,7 @@
     <div class="mt-6 flex gap-3">
       <button type="button" onclick="closeModal('delete-zone-modal')" class="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">Cancelar</button>
       <form id="delete-zone-form" action="" method="POST" class="flex-1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="w-full rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-colors">Sim, Excluir</button>
       </form>
     </div>

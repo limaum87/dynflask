@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from models import db, DnsZone, Host, User, Setting
 from provider_factory import get_provider, get_configured_providers, ProviderNotFoundError, ProviderNotConfiguredError
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
 from security import encrypt_value, decrypt_value
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +32,16 @@ db_host = 'mysql-db'  # Nome do serviço no docker-compose
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{db_user}:{db_password}@{db_host}/{db_name}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
+
+# Endurecimento dos cookies de sessão (mitiga CSRF/roubo de sessão).
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Cookie só trafega via HTTPS. Desative apenas para testes locais em HTTP
+# definindo SESSION_COOKIE_SECURE=False no ambiente.
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'True').lower() in ('1', 'true', 'yes')
+
+# Proteção CSRF para todos os formulários POST/PUT/PATCH/DELETE.
+csrf = CSRFProtect(app)
 
 # Inicializa o app com o banco de dados
 db.init_app(app)
@@ -440,9 +451,12 @@ def settings():
 # --- API Endpoints ---
 
 @app.route('/update', methods=['POST'])
+@csrf.exempt
 def update_ip():
     """
     Endpoint da API para atualizar o endereço IP de um host.
+    Isento de CSRF: é uma API máquina-a-máquina autenticada por token
+    (não usa cookie de sessão), consumida por clientes DynDNS externos.
     Requer 'hostname' e 'token' no corpo da requisição (JSON).
     Opcionalmente, pode receber 'ip' (se não for recebido, usa o IP de origem da requisição).
     """
@@ -530,6 +544,7 @@ def test_provider(provider_name):
 
 
 @app.route('/status', methods=['GET'])
+@login_required
 def get_status():
     """Retorna o status de todos os hosts configurados."""
     hosts = Host.query.all()

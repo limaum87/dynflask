@@ -34,6 +34,7 @@
       </button>
       {% if form_action %}
       <form action="{{ form_action }}" method="POST" class="flex-1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% endif %}
         <button type="{{ 'submit' if form_action else 'button' }}" onclick="{{ '' if form_action else "closeModal('" ~ id ~ "')" }}" class="flex-1 rounded-lg {{ 'bg-red-600 hover:bg-red-700 text-white' if variant == 'destructive' else 'bg-slate-900 hover:bg-slate-800 text-white' }} px-4 py-2.5 text-sm font-medium transition-colors">
           {{ confirm_label }}
