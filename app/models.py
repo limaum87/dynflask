@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
+
 class Host(db.Model):
     __tablename__ = 'hosts'
 
@@ -14,9 +15,11 @@ class Host(db.Model):
     auth_token = db.Column(db.String(255), nullable=False)
     current_ip = db.Column(db.String(45))
     last_updated = db.Column(db.TIMESTAMP, server_default=db.func.now(), onupdate=db.func.now())
+    provider = db.Column(db.String(50), nullable=False, default='cloudflare')
 
     def __repr__(self):
-        return f'<Host {self.hostname}>'
+        return f'<Host {self.hostname} ({self.provider})>'
+
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -33,6 +36,7 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.username}>'
+
 
 class Setting(db.Model):
     __tablename__ = 'settings'

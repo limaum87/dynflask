@@ -46,23 +46,31 @@
     </div>
     <p class="mt-2 text-2xl font-bold text-slate-900">{{ hosts_without_ip | length }}</p>
   </div>
-  {# API Endpoint #}
+  {# Providers #}
   <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
     <div class="flex items-center justify-between">
-      <p class="text-[13px] font-medium text-slate-500">API Endpoint</p>
+      <p class="text-[13px] font-medium text-slate-500">Providers Configurados</p>
       <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
-        <i data-lucide="link" class="h-[18px] w-[18px] text-slate-600"></i>
+        <i data-lucide="layers" class="h-[18px] w-[18px] text-slate-600"></i>
       </div>
     </div>
-    <code class="mt-2 block text-sm font-medium text-slate-700">/update</code>
+    <p class="mt-2 text-2xl font-bold text-slate-900">{{ configured_providers | length }}</p>
+    <div class="mt-1 flex flex-wrap gap-1.5">
+      {% for p in configured_providers %}
+      <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">{{ p }}</span>
+      {% endfor %}
+      {% if not configured_providers %}
+      <span class="text-[11px] text-amber-600">Nenhum configurado</span>
+      {% endif %}
+    </div>
   </div>
 </div>
 
 {# Add Host form #}
 {% call card(title='Adicionar Novo Host', icon='plus-circle') %}
   <form action="{{ url_for('add_host') }}" method="POST">
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div class="sm:col-span-1">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div>
         <label for="hostname" class="mb-1.5 block text-sm font-medium text-slate-700">Hostname</label>
         <input type="text" id="hostname" name="hostname" required
           placeholder="sub.dominio.com"
@@ -80,6 +88,18 @@
         <label for="ttl" class="mb-1.5 block text-sm font-medium text-slate-700">TTL (segundos)</label>
         <input type="number" id="ttl" name="ttl" value="300" required
           class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+      </div>
+      <div>
+        <label for="provider" class="mb-1.5 block text-sm font-medium text-slate-700">Provider</label>
+        <select id="provider" name="provider"
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+          {% if 'cloudflare' in configured_providers %}
+          <option value="cloudflare" selected>Cloudflare</option>
+          {% endif %}
+          {% if 'route53' in configured_providers %}
+          <option value="route53">AWS Route53</option>
+          {% endif %}
+        </select>
       </div>
     </div>
     <div class="mt-5">
@@ -117,8 +137,9 @@
             <th class="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Hostname</th>
             <th class="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">IP Atual</th>
             <th class="hidden sm:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tipo</th>
-            <th class="hidden md:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">TTL</th>
-            <th class="hidden lg:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Token</th>
+            <th class="hidden md:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Provider</th>
+            <th class="hidden lg:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">TTL</th>
+            <th class="hidden xl:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Token</th>
             <th class="px-6 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ações</th>
           </tr>
         </thead>
@@ -141,12 +162,26 @@
             <td class="hidden sm:table-cell px-6 py-3.5">
               <span class="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{{ host.record_type }}</span>
             </td>
-            {# TTL #}
+            {# Provider #}
             <td class="hidden md:table-cell px-6 py-3.5">
+              {% if host.provider == 'route53' %}
+                <span class="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                  <i data-lucide="cloud" class="h-3 w-3"></i>
+                  Route53
+                </span>
+              {% else %}
+                <span class="inline-flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                  <i data-lucide="cloud" class="h-3 w-3"></i>
+                  Cloudflare
+                </span>
+              {% endif %}
+            </td>
+            {# TTL #}
+            <td class="hidden lg:table-cell px-6 py-3.5">
               <span class="text-sm text-slate-500">{{ host.ttl }}s</span>
             </td>
             {# Token #}
-            <td class="hidden lg:table-cell px-6 py-3.5">
+            <td class="hidden xl:table-cell px-6 py-3.5">
               <div class="flex items-center gap-2">
                 <code class="token-copy relative rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-mono text-slate-600 select-all" onclick="copyToken('{{ host.auth_token }}', this)">
                   {{ host.auth_token[:12] }}...
@@ -160,7 +195,7 @@
             {# Actions #}
             <td class="px-6 py-3.5">
               <div class="flex items-center justify-end gap-1.5">
-                <button type="button" onclick="openEditModal({{ host.id }}, '{{ host.hostname }}', '{{ host.record_type }}', {{ host.ttl }})"
+                <button type="button" onclick="openEditModal({{ host.id }}, '{{ host.hostname }}', '{{ host.record_type }}', {{ host.ttl }}, '{{ host.provider }}')"
                   class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                   <i data-lucide="pencil" class="h-3 w-3"></i>
                   <span class="hidden sm:inline">Editar</span>
@@ -196,7 +231,7 @@
       <input type="text" id="edit-hostname" name="hostname" required
         class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
     </div>
-    <div class="grid grid-cols-2 gap-4">
+    <div class="grid grid-cols-3 gap-4">
       <div>
         <label for="edit-record-type" class="mb-1.5 block text-sm font-medium text-slate-700">Tipo</label>
         <select id="edit-record-type" name="record_type"
@@ -206,9 +241,17 @@
         </select>
       </div>
       <div>
-        <label for="edit-ttl" class="mb-1.5 block text-sm font-medium text-slate-700">TTL (segundos)</label>
+        <label for="edit-ttl" class="mb-1.5 block text-sm font-medium text-slate-700">TTL (seg)</label>
         <input type="number" id="edit-ttl" name="ttl" required
           class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+      </div>
+      <div>
+        <label for="edit-provider" class="mb-1.5 block text-sm font-medium text-slate-700">Provider</label>
+        <select id="edit-provider" name="provider"
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+          <option value="cloudflare">Cloudflare</option>
+          <option value="route53">AWS Route53</option>
+        </select>
       </div>
     </div>
     <div class="flex justify-end gap-3 pt-2">
@@ -224,7 +267,7 @@
   </form>
 {% endcall %}
 
-{# Delete Confirm Modal (single reusable) #}
+{# Delete Confirm Modal #}
 <div id="delete-modal" class="fixed inset-0 z-50 hidden">
   <div class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-[2px]" onclick="closeModal('delete-modal')"></div>
   <div class="modal-dialog fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-6 shadow-xl">

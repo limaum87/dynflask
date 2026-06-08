@@ -73,11 +73,12 @@ document.addEventListener('keydown', (e) => {
 // Edit Host Modal
 // ============================
 
-function openEditModal(hostId, hostname, recordType, ttl) {
+function openEditModal(hostId, hostname, recordType, ttl, provider) {
   const form = document.getElementById('edit-form');
   const hostnameInput = document.getElementById('edit-hostname');
   const recordTypeSelect = document.getElementById('edit-record-type');
   const ttlInput = document.getElementById('edit-ttl');
+  const providerSelect = document.getElementById('edit-provider');
 
   if (!form || !hostnameInput || !recordTypeSelect || !ttlInput) return;
 
@@ -85,6 +86,7 @@ function openEditModal(hostId, hostname, recordType, ttl) {
   hostnameInput.value = hostname;
   recordTypeSelect.value = recordType;
   ttlInput.value = ttl;
+  if (providerSelect) providerSelect.value = provider || 'cloudflare';
 
   openModal('edit-modal');
 }
