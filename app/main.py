@@ -27,7 +27,9 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 db_user = os.getenv("MYSQL_USER")
 db_password = os.getenv("MYSQL_PASSWORD")
 db_name = os.getenv("MYSQL_DATABASE")
-db_host = 'mysql-db'  # Nome do serviço no docker-compose
+# Host do banco. Default 'mysql-db' (compose standalone do repo); em produção
+# com MySQL compartilhado defina MYSQL_HOST=mysql (alias de rede do mysql-shared).
+db_host = os.getenv('MYSQL_HOST', 'mysql-db')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{db_user}:{db_password}@{db_host}/{db_name}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

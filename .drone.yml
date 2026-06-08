@@ -1,0 +1,50 @@
+kind: pipeline
+type: docker
+name: deploy
+
+trigger:
+  branch:
+    - main
+  event:
+    - push
+
+steps:
+  # 1) Atualiza o código fonte clonado no host (git pull, sem build de imagem em registry)
+  - name: pull
+    image: alpine/git
+    volumes:
+      - name: apps
+        path: /opt/infra/apps
+      - name: ssh
+        path: /root/.ssh
+    commands:
+      - cd /opt/infra/apps/dynflask
+      - git pull origin main
+
+  # 2) Build local da imagem a partir do fonte + restart do container (sem GHCR)
+  - name: deploy
+    image: docker:cli
+    volumes:
+      - name: dockersock
+        path: /var/run/docker.sock
+      - name: infra
+        path: /opt/infra
+    commands:
+      - cd /opt/infra/sites/dynflask-site
+      - docker compose up -d --build
+      - docker compose restart web
+      - docker image prune -f
+
+volumes:
+  - name: apps
+    host:
+      path: /opt/infra/apps
+  - name: ssh
+    host:
+      path: /root/.ssh
+  - name: dockersock
+    host:
+      path: /var/run/docker.sock
+  - name: infra
+    host:
+      path: /opt/infra
