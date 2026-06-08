@@ -288,6 +288,7 @@ def add_host(zone_id):
     hostname = request.form.get('hostname', '').strip().lower()
     record_type = request.form.get('record_type', 'A')
     ttl = int(request.form.get('ttl', 300))
+    ip = request.form.get('ip', '').strip() or None
 
     if not hostname:
         flash('O hostname é obrigatório.', 'error')
@@ -311,6 +312,7 @@ def add_host(zone_id):
         record_type=record_type,
         ttl=ttl,
         auth_token=auth_token,
+        current_ip=ip,
     )
     db.session.add(host)
     db.session.commit()
