@@ -92,16 +92,15 @@
   {% if zones %}
   <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
     {% for zone in zones %}
-    <a href="{{ url_for('zone_detail', zone_id=zone.id) }}"
-      class="group block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-200 hover:shadow-md transition-all">
+    <div class="group block rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-200 hover:shadow-md transition-all cursor-pointer" onclick="location.href='{{ url_for('zone_detail', zone_id=zone.id) }}'">
       <div class="flex items-start justify-between">
         <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
+          <a href="{{ url_for('zone_detail', zone_id=zone.id) }}" class="flex items-center gap-2">
             <i data-lucide="globe" class="h-4 w-4 shrink-0 text-slate-400 group-hover:text-blue-500 transition-colors"></i>
             <h3 class="truncate text-base font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
               {{ zone.name }}
             </h3>
-          </div>
+          </a>
           <div class="mt-2 flex items-center gap-2">
             {% if zone.provider == 'route53' %}
               <span class="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
@@ -116,13 +115,13 @@
             {% endif %}
           </div>
         </div>
-        {# Actions — prevent link navigation #}
-        <div class="flex items-center gap-1 ml-2" onclick="event.stopPropagation()">
-          <button type="button" onclick="openEditZoneModal({{ zone.id }}, '{{ zone.name }}', '{{ zone.provider }}')"
+        {# Actions — outside the link path #}
+        <div class="flex items-center gap-1 ml-2 shrink-0" onclick="event.stopPropagation()">
+          <button type="button" onclick="event.stopPropagation(); openEditZoneModal({{ zone.id }}, '{{ zone.name }}', '{{ zone.provider }}')"
             class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors" title="Editar zona">
             <i data-lucide="pencil" class="h-3.5 w-3.5"></i>
           </button>
-          <button type="button" onclick="openDeleteZoneModal({{ zone.id }}, '{{ zone.name }}')"
+          <button type="button" onclick="event.stopPropagation(); openDeleteZoneModal({{ zone.id }}, '{{ zone.name }}')"
             class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Excluir zona">
             <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
           </button>
@@ -144,7 +143,7 @@
           <i data-lucide="arrow-right" class="h-3 w-3"></i>
         </div>
       </div>
-    </a>
+    </div>
     {% endfor %}
   </div>
 
