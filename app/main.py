@@ -101,25 +101,35 @@ def add_zone():
         flash(f'A zona "{name}" já existe.', 'error')
         return redirect(url_for('index'))
 
-    # Validar zona contra o provider (warn se não bater)
+    # Validar zona contra o provider (bloquear se não bater)
     try:
         dns_provider = get_provider(provider)
         zone_info = dns_provider.get_zone_info()
         provider_zone_name = zone_info.get('name', '').rstrip('.').lower()
         zone_name_clean = name.rstrip('.').lower()
 
-        if provider_zone_name and provider_zone_name != zone_name_clean:
-            # Verificar se a zona é subdomínio da Hosted Zone
-            if not zone_name_clean.endswith('.' + provider_zone_name):
+        if provider_zone_name:
+            # Verifica se bate exatamente OU é subdomínio da Hosted Zone
+            is_match = zone_name_clean == provider_zone_name
+            is_subdomain = zone_name_clean.endswith('.' + provider_zone_name)
+
+            if not is_match and not is_subdomain:
                 flash(
-                    f'⚠️ A zona "{name}" não corresponde à zona do provider '
-                    f'"{provider_zone_name}" (ID: {zone_info.get("id", "?")}). '
-                    f'Os registros importados serão da Hosted Zone "{provider_zone_name}". '
-                    f'Se isso não estiver correto, ajuste as credenciais em Configurações.',
-                    'warning'
+                    f'❌ A zona "{name}" não corresponde à Hosted Zone configurada "{provider_zone_name}" '
+                    f'(ID: {zone_info.get("id", "?")}). Verifique as credenciais em Configurações — '
+                    f'você pode estar usando o Zone ID errado.',
+                    'error'
                 )
-    except Exception:
-        pass  # Se não conseguir verificar, continua normalmente
+                return redirect(url_for('index'))
+    except ProviderNotConfiguredError:
+        flash(f'O provider "{provider}" não está configurado.', 'error')
+        return redirect(url_for('index'))
+    except Exception as e:
+        # get_zone_info pode falhar se o IAM não tiver permissão GetHostedZone
+        # Mostra warning e permite continuar
+        logging.warning(f"Não foi possível validar zona contra o provider: {e}")
+        flash(f'⚠️ Não foi possível validar a zona contra o provider ({e}). '
+              f'Verifique se o IAM tem permissão route53:GetHostedZone.', 'warning')
 
     zone = DnsZone(name=name, provider=provider)
     db.session.add(zone)
