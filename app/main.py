@@ -174,10 +174,17 @@ def _sync_zone_records(zone: DnsZone) -> int:
     Importa registros DNS do provider para a zona.
     Cria hosts apenas para registros que ainda não existem localmente.
     Retorna o número de registros importados.
+
+    A lógica de matching é flexível: como o Route53 lista TODOS os registros
+    da Hosted Zone, e a Hosted Zone pode cobrir 'accept.inf.br' enquanto
+    o usuário registrou a zona como 'accept.inf.br' ou até 'dyn.accept.inf.br',
+    nós importamos todos os registros que pertencem à Hosted Zone do provider
+    e associamos à zona do DynFlask.
     """
     provider = get_provider(zone.provider)
 
     imported = 0
+    skipped = 0
     for record_type in ('A', 'AAAA'):
         try:
             records = provider.list_dns_records(record_type=record_type)
@@ -186,15 +193,33 @@ def _sync_zone_records(zone: DnsZone) -> int:
             continue
 
         for record in records:
-            hostname = record['hostname'].lower().rstrip('.')
+            hostname = record['hostname'].lower().rstrip('.').strip()
 
-            # Só importar registros que pertençam a esta zona
-            if not hostname.endswith(zone.name):
+            if not hostname:
                 continue
 
-            # Ignorar o registro apex nu (zona root) — opcional
-            # if hostname == zone.name:
-            #     continue
+            # Detectar o domínio base da Hosted Zone a partir dos registros.
+            # Se a zona é 'dyn.accept.inf.br' mas os registros são 'foo.accept.inf.br',
+            # significa que a Hosted Zone é 'accept.inf.br' — importar tudo.
+            # Se os registros terminam com o nome da zona exato, filtrar normalmente.
+            zone_name = zone.name.rstrip('.').lower()
+            hostname_matches_zone = hostname == zone_name or hostname.endswith('.' + zone_name)
+
+            if not hostname_matches_zone:
+                # Tentar matching reverso: verificar se algum sufixo do hostname
+                # corresponde à zona (ex: zona='dyn.accept.inf.br' e hostname='foo.accept.inf.br')
+                # Neste caso, o domínio base é 'accept.inf.br' — importar todos
+                # que terminam com esse domínio base
+                parts = zone_name.split('.')
+                matched_parent = False
+                for i in range(len(parts)):
+                    parent = '.'.join(parts[i:])
+                    if hostname.endswith('.' + parent) or hostname == parent:
+                        matched_parent = True
+                        break
+                if not matched_parent:
+                    skipped += 1
+                    continue
 
             # Verificar se já existe
             existing = Host.query.filter_by(hostname=hostname, zone_id=zone.id).first()
@@ -203,6 +228,8 @@ def _sync_zone_records(zone: DnsZone) -> int:
                 if record.get('content') and existing.current_ip != record['content']:
                     existing.current_ip = record['content']
                 continue
+
+            logging.info(f"[Sync] Importando: {hostname} -> {record.get('content')} ({record_type})")
 
             # Criar novo host com token
             host = Host(
@@ -217,6 +244,7 @@ def _sync_zone_records(zone: DnsZone) -> int:
             imported += 1
 
     db.session.commit()
+    logging.info(f"[Sync] Zona {zone.name}: {imported} importados, {skipped} ignorados")
     return imported
 
 

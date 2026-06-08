@@ -47,12 +47,14 @@ class Route53Provider(DNSProvider):
                     if record['Type'] == record_type:
                         values = [r['Value'] for r in record.get('ResourceRecords', [])]
                         if values:
+                            hostname = self._strip_trailing_dot(record['Name'])
+                            logger.debug(f"[Route53] Record: {hostname} -> {values[0]}")
                             result.append({
-                                'hostname': self._strip_trailing_dot(record['Name']),
+                                'hostname': hostname,
                                 'type': record['Type'],
                                 'content': values[0],
                                 'ttl': record.get('TTL', 300),
-                                'id': self._strip_trailing_dot(record['Name']),
+                                'id': hostname,
                             })
 
             logger.info(f"[Route53] Encontrados {len(result)} registros tipo {record_type}")
