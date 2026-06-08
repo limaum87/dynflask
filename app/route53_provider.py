@@ -16,15 +16,6 @@ class Route53Provider(DNSProvider):
     """Gerencia registros DNS no AWS Route53 via boto3."""
 
     def __init__(self, hosted_zone_id: str, aws_access_key_id: str, aws_secret_access_key: str, region: str = 'us-east-1'):
-        """
-        Inicializa o provider do Route53.
-
-        Args:
-            hosted_zone_id: ID da Hosted Zone no Route53 (ex: Z1ABC2DEF3GHIJ).
-            aws_access_key_id: AWS Access Key ID com permissão para Route53.
-            aws_secret_access_key: AWS Secret Access Key.
-            region: Região AWS (padrão: us-east-1).
-        """
         self.hosted_zone_id = hosted_zone_id
         self.region = region
 
@@ -37,10 +28,44 @@ class Route53Provider(DNSProvider):
         )
 
     def _ensure_trailing_dot(self, hostname: str) -> str:
-        """Route53 requer FQDN com ponto final."""
         if not hostname.endswith('.'):
             return hostname + '.'
         return hostname
+
+    def _strip_trailing_dot(self, hostname: str) -> str:
+        return hostname.rstrip('.')
+
+    def list_dns_records(self, record_type: str = 'A') -> list[dict]:
+        """Lista todos os registros DNS do tipo informado na Hosted Zone."""
+        logger.info(f"[Route53] Listando registros tipo {record_type}")
+        result = []
+
+        try:
+            paginator = self.client.get_paginator('list_resource_record_sets')
+            for page in paginator.paginate(HostedZoneId=self.hosted_zone_id):
+                for record in page.get('ResourceRecordSets', []):
+                    if record['Type'] == record_type:
+                        values = [r['Value'] for r in record.get('ResourceRecords', [])]
+                        if values:
+                            result.append({
+                                'hostname': self._strip_trailing_dot(record['Name']),
+                                'type': record['Type'],
+                                'content': values[0],
+                                'ttl': record.get('TTL', 300),
+                                'id': self._strip_trailing_dot(record['Name']),
+                            })
+
+            logger.info(f"[Route53] Encontrados {len(result)} registros tipo {record_type}")
+            return result
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            logger.error(f"[Route53] Erro ao listar registros ({error_code}): {error_msg}")
+            raise RuntimeError(f"Erro Route53 ({error_code}): {error_msg}") from e
+        except NoCredentialsError:
+            logger.error("[Route53] Credenciais AWS inválidas ou não configuradas")
+            raise RuntimeError("Credenciais AWS inválidas ou não configuradas")
 
     def get_dns_record(self, hostname: str, record_type: str = 'A') -> dict | None:
         """Busca um registro DNS específico na Hosted Zone do Route53."""
@@ -104,7 +129,6 @@ class Route53Provider(DNSProvider):
         except ClientError as e:
             error_code = e.response['Error']['Code']
             error_msg = e.response['Error']['Message']
-            # Se o registro já existe, usar UPSERT é mais seguro
             if error_code == 'InvalidChangeBatch' and 'already exists' in error_msg:
                 logger.warning(f"[Route53] Registro já existe, usando UPSERT: {fqdn}")
                 return self.update_dns_record(fqdn, hostname, ip_address, record_type, ttl)
@@ -112,10 +136,7 @@ class Route53Provider(DNSProvider):
             raise RuntimeError(f"Erro Route53 ({error_code}): {error_msg}") from e
 
     def update_dns_record(self, record_id: str, hostname: str, ip_address: str, record_type: str, ttl: int) -> dict:
-        """
-        Atualiza (UPSERT) um registro DNS no Route53.
-        Usa UPSERT para simplificar — cria se não existe, atualiza se existe.
-        """
+        """Atualiza (UPSERT) um registro DNS no Route53."""
         fqdn = self._ensure_trailing_dot(hostname)
 
         logger.info(f"[Route53] UPSERT registro: {fqdn} -> {ip_address} ({record_type}, TTL={ttl})")

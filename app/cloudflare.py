@@ -17,22 +17,36 @@ class CloudflareProvider(DNSProvider):
     """Gerencia registros DNS no Cloudflare via API REST."""
 
     def __init__(self, zone_id: str, api_token: str):
-        """
-        Inicializa o provider do Cloudflare.
-
-        Args:
-            zone_id: ID da zona (domínio) no Cloudflare.
-            api_token: Token de API com permissão Zone > DNS > Edit.
-        """
         self.zone_id = zone_id
         self.api_token = api_token
 
     def _get_headers(self) -> dict:
-        """Cria os cabeçalhos de autenticação para a API do Cloudflare."""
         return {
             "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
         }
+
+    def list_dns_records(self, record_type: str = 'A') -> list[dict]:
+        """Lista todos os registros DNS do tipo informado na zona do Cloudflare."""
+        headers = self._get_headers()
+        url = f"{CLOUDFLARE_API_URL}/zones/{self.zone_id}/dns_records?type={record_type}&per_page=5000"
+
+        logger.info(f"[Cloudflare] Listando registros tipo {record_type}")
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        records = response.json()["result"]
+        result = []
+        for r in records:
+            result.append({
+                'hostname': r['name'],
+                'type': r['type'],
+                'content': r['content'],
+                'ttl': r['ttl'],
+                'id': r['id'],
+            })
+        logger.info(f"[Cloudflare] Encontrados {len(result)} registros tipo {record_type}")
+        return result
 
     def get_dns_record(self, hostname: str, record_type: str = 'A') -> dict | None:
         """Busca um registro DNS específico na zona do Cloudflare."""

@@ -26,7 +26,6 @@ function toggleSidebar() {
   }
 }
 
-// Close sidebar on resize to desktop
 window.addEventListener('resize', () => {
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
@@ -49,7 +48,6 @@ function openModal(id) {
   if (!modal) return;
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  // Re-initialize icons inside modal
   setTimeout(() => lucide.createIcons(), 50);
 }
 
@@ -60,7 +58,6 @@ function closeModal(id) {
   document.body.style.overflow = '';
 }
 
-// Close modal on Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     document.querySelectorAll('[id$="-modal"]:not(.hidden)').forEach((modal) => {
@@ -70,40 +67,57 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================
-// Edit Host Modal
+// Zone Modals
 // ============================
 
-function openEditModal(hostId, hostname, recordType, ttl, provider) {
+function openEditZoneModal(zoneId, name, provider) {
+  const form = document.getElementById('edit-zone-form');
+  const nameInput = document.getElementById('edit-zone-name');
+  const providerSelect = document.getElementById('edit-zone-provider');
+  if (!form || !nameInput || !providerSelect) return;
+
+  form.action = `/zones/edit/${zoneId}`;
+  nameInput.value = name;
+  providerSelect.value = provider;
+  openModal('edit-zone-modal');
+}
+
+function openDeleteZoneModal(zoneId, name) {
+  const form = document.getElementById('delete-zone-form');
+  const nameEl = document.getElementById('delete-zone-name');
+  if (!form || !nameEl) return;
+
+  form.action = `/zones/delete/${zoneId}`;
+  nameEl.textContent = name;
+  openModal('delete-zone-modal');
+}
+
+// ============================
+// Host Modals
+// ============================
+
+function openEditModal(hostId, hostname, recordType, ttl) {
   const form = document.getElementById('edit-form');
   const hostnameInput = document.getElementById('edit-hostname');
   const recordTypeSelect = document.getElementById('edit-record-type');
   const ttlInput = document.getElementById('edit-ttl');
-  const providerSelect = document.getElementById('edit-provider');
 
   if (!form || !hostnameInput || !recordTypeSelect || !ttlInput) return;
 
-  form.action = `/edit/${hostId}`;
+  form.action = `/host/edit/${hostId}`;
   hostnameInput.value = hostname;
   recordTypeSelect.value = recordType;
   ttlInput.value = ttl;
-  if (providerSelect) providerSelect.value = provider || 'cloudflare';
-
   openModal('edit-modal');
 }
-
-// ============================
-// Delete Host Modal
-// ============================
 
 function openDeleteModal(hostId, hostname) {
   const form = document.getElementById('delete-form');
   const hostnameEl = document.getElementById('delete-hostname');
-
   if (!form || !hostnameEl) return;
 
-  form.action = `/delete/${hostId}`;
+  form.action = `/host/delete/${hostId}`;
   hostnameEl.textContent = hostname;
-
   openModal('delete-modal');
 }
 
@@ -113,14 +127,12 @@ function openDeleteModal(hostId, hostname) {
 
 function copyToken(token, element) {
   navigator.clipboard.writeText(token).then(() => {
-    // Show feedback
     const codeEl = element.closest('div')?.querySelector('code');
     if (codeEl) {
       codeEl.classList.add('copied');
       setTimeout(() => codeEl.classList.remove('copied'), 2000);
     }
 
-    // Show tooltip on the button
     if (element.tagName === 'BUTTON') {
       const originalHTML = element.innerHTML;
       element.innerHTML = '<i data-lucide="check" class="h-3.5 w-3.5 text-emerald-500"></i>';
@@ -130,8 +142,7 @@ function copyToken(token, element) {
         lucide.createIcons();
       }, 2000);
     }
-  }).catch((err) => {
-    // Fallback: select text
+  }).catch(() => {
     const codeEl = element.closest('div')?.querySelector('code');
     if (codeEl) {
       const range = document.createRange();

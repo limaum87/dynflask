@@ -11,6 +11,23 @@ class DNSProvider(ABC):
     """Classe abstrata que define o contrato para provedores de DNS."""
 
     @abstractmethod
+    def list_dns_records(self, record_type: str = 'A') -> list[dict]:
+        """
+        Lista todos os registros DNS da zona para um dado tipo.
+
+        Args:
+            record_type: Tipo do registro (A, AAAA, CNAME, etc.).
+
+        Returns:
+            Lista de dicts, cada um com pelo menos:
+            - 'hostname': str (FQDN)
+            - 'type': str
+            - 'content': str (IP ou valor)
+            - 'ttl': int
+        """
+        ...
+
+    @abstractmethod
     def get_dns_record(self, hostname: str, record_type: str = 'A') -> dict | None:
         """
         Busca um registro DNS existente.
@@ -60,10 +77,6 @@ class DNSProvider(ABC):
     def upsert_dns_record(self, hostname: str, ip_address: str, record_type: str, ttl: int) -> dict:
         """
         Cria ou atualiza um registro DNS (conveniência).
-
-        Verifica se o registro já existe. Se existir e o IP for o mesmo,
-        não faz nada. Se existir com IP diferente, atualiza. Se não existir,
-        cria um novo.
 
         Returns:
             dict com {'action': 'created'|'updated'|'noop', 'record': dict}

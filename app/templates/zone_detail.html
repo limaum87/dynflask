@@ -1,0 +1,267 @@
+{% extends "layout.html" %}
+{% from 'components/_card.html' import card %}
+{% from 'components/_badge.html' import badge %}
+{% from 'components/_modal.html' import modal %}
+{% from 'components/_empty_state.html' import empty_state %}
+
+{% block title %}{{ zone.name }} — DynFlask{% endblock %}
+{% block page_title %}
+  <div class="flex items-center gap-2">
+    <a href="{{ url_for('index') }}" class="text-slate-400 hover:text-slate-600 transition-colors">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>
+    </a>
+    {{ zone.name }}
+    {% if zone.provider == 'route53' %}
+      <span class="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+        <i data-lucide="cloud" class="h-3 w-3"></i> Route53
+      </span>
+    {% else %}
+      <span class="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+        <i data-lucide="cloud" class="h-3 w-3"></i> Cloudflare
+      </span>
+    {% endif %}
+  </div>
+{% endblock %}
+
+{% block content %}
+
+{# Flash messages #}
+{% include 'components/_flash_messages.html' %}
+
+{# Zone info #}
+<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex items-center justify-between">
+      <p class="text-[13px] font-medium text-slate-500">Registros</p>
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50">
+        <i data-lucide="server" class="h-[18px] w-[18px] text-blue-600"></i>
+      </div>
+    </div>
+    <p class="mt-2 text-2xl font-bold text-slate-900">{{ hosts | length }}</p>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex items-center justify-between">
+      <p class="text-[13px] font-medium text-slate-500">Com IP Atualizado</p>
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50">
+        <i data-lucide="check-circle-2" class="h-[18px] w-[18px] text-emerald-600"></i>
+      </div>
+    </div>
+    <p class="mt-2 text-2xl font-bold text-slate-900">{{ hosts | selectattr('current_ip') | list | length }}</p>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex items-center justify-between">
+      <p class="text-[13px] font-medium text-slate-500">Provider</p>
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+        <i data-lucide="plug" class="h-[18px] w-[18px] text-slate-600"></i>
+      </div>
+    </div>
+    <p class="mt-2 text-lg font-bold text-slate-900 capitalize">{{ zone.provider }}</p>
+  </div>
+</div>
+
+{# Add Host form #}
+{% call card(title='Adicionar Registro', icon='plus-circle') %}
+  <form action="{{ url_for('add_host', zone_id=zone.id) }}" method="POST">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div class="sm:col-span-2">
+        <label for="hostname" class="mb-1.5 block text-sm font-medium text-slate-700">Hostname</label>
+        <div class="flex items-center gap-1">
+          <input type="text" id="hostname" name="hostname" required
+            placeholder="home"
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors">
+          <span class="shrink-0 text-sm text-slate-400">.{{ zone.name }}</span>
+        </div>
+        <p class="mt-1 text-[11px] text-slate-400">Deixe o nome completo (ex: home.{{ zone.name }}) ou apenas o subdomínio (ex: home)</p>
+      </div>
+      <div>
+        <label for="record_type" class="mb-1.5 block text-sm font-medium text-slate-700">Tipo</label>
+        <select id="record_type" name="record_type"
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+          <option value="A" selected>A (IPv4)</option>
+          <option value="AAAA">AAAA (IPv6)</option>
+        </select>
+      </div>
+      <div>
+        <label for="ttl" class="mb-1.5 block text-sm font-medium text-slate-700">TTL (seg)</label>
+        <input type="number" id="ttl" name="ttl" value="300" required
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+      </div>
+    </div>
+    <div class="mt-5">
+      <button type="submit"
+        class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-colors">
+        <i data-lucide="plus" class="h-4 w-4"></i>
+        Adicionar Registro
+      </button>
+    </div>
+  </form>
+{% endcall %}
+
+{# Hosts table #}
+<div class="mt-8">
+  {% if hosts %}
+  <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+      <div class="flex items-center gap-3">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
+          <i data-lucide="list" class="h-[18px] w-[18px] text-slate-600"></i>
+        </div>
+        <div>
+          <h3 class="text-[15px] font-semibold text-slate-900">Registros DNS</h3>
+          <p class="mt-0.5 text-[12px] text-slate-500">{{ hosts | length }} registro{{ 's' if hosts | length != 1 }} em {{ zone.name }}</p>
+        </div>
+      </div>
+      <a href="{{ url_for('sync_zone', zone_id=zone.id) }}"
+        class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+        <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
+        Sincronizar
+      </a>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-slate-100 bg-slate-50/60">
+            <th class="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Hostname</th>
+            <th class="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">IP Atual</th>
+            <th class="hidden sm:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tipo</th>
+            <th class="hidden md:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">TTL</th>
+            <th class="hidden lg:table-cell px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Token</th>
+            <th class="px-6 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ações</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for host in hosts %}
+          <tr class="hover:bg-slate-50/60 transition-colors">
+            <td class="px-6 py-3.5">
+              <span class="text-sm font-medium text-slate-900">{{ host.hostname }}</span>
+            </td>
+            <td class="px-6 py-3.5">
+              {% if host.current_ip %}
+                {{ badge(host.current_ip, variant='success') }}
+              {% else %}
+                {{ badge('N/A', variant='outline') }}
+              {% endif %}
+            </td>
+            <td class="hidden sm:table-cell px-6 py-3.5">
+              <span class="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{{ host.record_type }}</span>
+            </td>
+            <td class="hidden md:table-cell px-6 py-3.5">
+              <span class="text-sm text-slate-500">{{ host.ttl }}s</span>
+            </td>
+            <td class="hidden lg:table-cell px-6 py-3.5">
+              <div class="flex items-center gap-2">
+                <code class="token-copy relative rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-mono text-slate-600 select-all" onclick="copyToken('{{ host.auth_token }}', this)">
+                  {{ host.auth_token[:12] }}...
+                  <span class="copy-tooltip">Copiado!</span>
+                </code>
+                <button type="button" onclick="copyToken('{{ host.auth_token }}', this)" class="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors" title="Copiar token completo">
+                  <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+                </button>
+              </div>
+            </td>
+            <td class="px-6 py-3.5">
+              <div class="flex items-center justify-end gap-1.5">
+                <button type="button" onclick="openEditModal({{ host.id }}, '{{ host.hostname }}', '{{ host.record_type }}', {{ host.ttl }})"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+                  <i data-lucide="pencil" class="h-3 w-3"></i>
+                  <span class="hidden sm:inline">Editar</span>
+                </button>
+                <button type="button" onclick="openDeleteModal({{ host.id }}, '{{ host.hostname }}')"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
+                  <i data-lucide="trash-2" class="h-3 w-3"></i>
+                  <span class="hidden sm:inline">Excluir</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+    {{ empty_state(
+      icon='server',
+      title='Nenhum registro encontrado',
+      description='Adicione um registro acima ou clique em Sincronizar para importar automaticamente do provider.'
+    ) }}
+  {% endif %}
+</div>
+
+{# API Usage card #}
+<div class="mt-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+  <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+    <i data-lucide="terminal" class="h-4 w-4 text-emerald-500"></i>
+    Atualizar IP via API
+  </h3>
+  <div class="mt-3 rounded-lg bg-slate-950 p-4">
+    <code class="block text-[12px] leading-relaxed text-slate-300">
+      <span class="text-emerald-400">curl</span> -X POST \<br>
+      &nbsp;&nbsp;http://localhost:5000<span class="text-amber-400">/update</span> \<br>
+      &nbsp;&nbsp;-H <span class="text-amber-400">"Content-Type: application/json"</span> \<br>
+      &nbsp;&nbsp;-d <span class="text-amber-400">'{</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-blue-400">"hostname"</span>: <span class="text-amber-400">"home.{{ zone.name }}"</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-blue-400">"token"</span>: <span class="text-amber-400">"TOKEN_DO_HOST"</span><br>
+      &nbsp;&nbsp;<span class="text-amber-400">}'</span>
+    </code>
+  </div>
+  <p class="mt-2 text-[12px] text-slate-500">
+    Se <code class="rounded bg-slate-100 px-1 py-0.5 text-[11px]">ip</code> não for enviado, o IP de origem será usado. Provider: <strong>{{ zone.provider }}</strong>
+  </p>
+</div>
+
+{# Edit Modal #}
+{% call modal(id='edit-modal', title='Editar Registro') %}
+  <form id="edit-form" action="" method="POST" class="space-y-4">
+    <div>
+      <label for="edit-hostname" class="mb-1.5 block text-sm font-medium text-slate-700">Hostname</label>
+      <input type="text" id="edit-hostname" name="hostname" required
+        class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label for="edit-record-type" class="mb-1.5 block text-sm font-medium text-slate-700">Tipo</label>
+        <select id="edit-record-type" name="record_type"
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+          <option value="A">A (IPv4)</option>
+          <option value="AAAA">AAAA (IPv6)</option>
+        </select>
+      </div>
+      <div>
+        <label for="edit-ttl" class="mb-1.5 block text-sm font-medium text-slate-700">TTL (seg)</label>
+        <input type="number" id="edit-ttl" name="ttl" required
+          class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 pt-2">
+      <button type="button" onclick="closeModal('edit-modal')" class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">Cancelar</button>
+      <button type="submit" class="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors">Salvar</button>
+    </div>
+  </form>
+{% endcall %}
+
+{# Delete Confirm Modal #}
+<div id="delete-modal" class="fixed inset-0 z-50 hidden">
+  <div class="modal-backdrop fixed inset-0 bg-slate-900/60 backdrop-blur-[2px]" onclick="closeModal('delete-modal')"></div>
+  <div class="modal-dialog fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+    <div class="flex flex-col items-center text-center">
+      <div class="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+        <i data-lucide="alert-triangle" class="h-6 w-6 text-red-600"></i>
+      </div>
+      <h3 class="mt-4 text-base font-semibold text-slate-900">Excluir Registro</h3>
+      <p class="mt-2 text-sm text-slate-500">
+        Excluir <strong id="delete-hostname" class="text-slate-700"></strong>?
+      </p>
+    </div>
+    <div class="mt-6 flex gap-3">
+      <button type="button" onclick="closeModal('delete-modal')" class="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">Cancelar</button>
+      <form id="delete-form" action="" method="POST" class="flex-1">
+        <button type="submit" class="w-full rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-colors">Excluir</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

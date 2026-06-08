@@ -4,7 +4,7 @@ import secrets
 import logging
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from dotenv import load_dotenv
-from models import db, Host, User, Setting
+from models import db, DnsZone, Host, User, Setting
 from provider_factory import get_provider, get_configured_providers, ProviderNotFoundError, ProviderNotConfiguredError
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from security import encrypt_value, decrypt_value
@@ -66,15 +66,240 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# --- Rotas da Aplicação ---
+# --- Rotas de Zonas ---
 
 @app.route('/')
 @login_required
 def index():
-    """Página principal que lista todos os hosts."""
-    hosts = Host.query.all()
+    """Página principal — lista todas as zonas DNS."""
+    zones = DnsZone.query.order_by(DnsZone.name).all()
     configured_providers = get_configured_providers()
-    return render_template('index.html', hosts=hosts, configured_providers=configured_providers)
+    return render_template('index.html', zones=zones, configured_providers=configured_providers)
+
+
+@app.route('/zones/add', methods=['POST'])
+@login_required
+def add_zone():
+    """Adiciona uma nova zona DNS e importa registros automaticamente."""
+    name = request.form.get('name', '').strip().lower()
+    provider = request.form.get('provider', 'cloudflare')
+    auto_sync = request.form.get('auto_sync') == 'on'
+
+    if not name:
+        flash('O nome da zona é obrigatório.', 'error')
+        return redirect(url_for('index'))
+
+    # Validar provider
+    configured = get_configured_providers()
+    if provider not in configured:
+        flash(f'O provider "{provider}" não está configurado. Configure as credenciais em Configurações.', 'error')
+        return redirect(url_for('index'))
+
+    # Verificar duplicata
+    existing = DnsZone.query.filter_by(name=name).first()
+    if existing:
+        flash(f'A zona "{name}" já existe.', 'error')
+        return redirect(url_for('index'))
+
+    zone = DnsZone(name=name, provider=provider)
+    db.session.add(zone)
+    db.session.commit()
+
+    # Auto-import registros se solicitado
+    imported = 0
+    if auto_sync:
+        try:
+            imported = _sync_zone_records(zone)
+        except Exception as e:
+            flash(f'Zona "{name}" criada, mas falha ao importar registros: {e}', 'warning')
+            return redirect(url_for('zone_detail', zone_id=zone.id))
+
+    if imported > 0:
+        flash(f'Zona "{name}" criada com sucesso! {imported} registro(s) importado(s) automaticamente.', 'success')
+    else:
+        flash(f'Zona "{name}" criada com sucesso!', 'success')
+
+    return redirect(url_for('zone_detail', zone_id=zone.id))
+
+
+@app.route('/zones/edit/<int:zone_id>', methods=['POST'])
+@login_required
+def edit_zone(zone_id):
+    """Edita uma zona existente."""
+    zone = DnsZone.query.get_or_404(zone_id)
+
+    zone.name = request.form.get('name', '').strip().lower()
+    zone.provider = request.form.get('provider', zone.provider)
+
+    # Validar provider
+    configured = get_configured_providers()
+    if zone.provider not in configured:
+        flash(f'O provider "{zone.provider}" não está configurado.', 'warning')
+
+    db.session.commit()
+    flash(f'Zona "{zone.name}" atualizada com sucesso!', 'success')
+    return redirect(url_for('index'))
+
+
+@app.route('/zones/delete/<int:zone_id>', methods=['POST'])
+@login_required
+def delete_zone(zone_id):
+    """Exclui uma zona e todos os seus hosts."""
+    zone = DnsZone.query.get_or_404(zone_id)
+    zone_name = zone.name
+    db.session.delete(zone)
+    db.session.commit()
+
+    flash(f'Zona "{zone_name}" excluída com sucesso!', 'success')
+    return redirect(url_for('index'))
+
+
+@app.route('/zone/<int:zone_id>/sync')
+@login_required
+def sync_zone(zone_id):
+    """Sincroniza os registros de uma zona com o provider DNS."""
+    zone = DnsZone.query.get_or_404(zone_id)
+
+    try:
+        imported = _sync_zone_records(zone)
+        flash(f'Sincronização concluída! {imported} registro(s) importado(s).', 'success')
+    except Exception as e:
+        flash(f'Erro ao sincronizar: {e}', 'error')
+
+    return redirect(url_for('zone_detail', zone_id=zone.id))
+
+
+def _sync_zone_records(zone: DnsZone) -> int:
+    """
+    Importa registros DNS do provider para a zona.
+    Cria hosts apenas para registros que ainda não existem localmente.
+    Retorna o número de registros importados.
+    """
+    provider = get_provider(zone.provider)
+
+    imported = 0
+    for record_type in ('A', 'AAAA'):
+        try:
+            records = provider.list_dns_records(record_type=record_type)
+        except Exception as e:
+            logging.warning(f"Falha ao listar registros {record_type} para {zone.name}: {e}")
+            continue
+
+        for record in records:
+            hostname = record['hostname'].lower().rstrip('.')
+
+            # Só importar registros que pertençam a esta zona
+            if not hostname.endswith(zone.name):
+                continue
+
+            # Ignorar o registro apex nu (zona root) — opcional
+            # if hostname == zone.name:
+            #     continue
+
+            # Verificar se já existe
+            existing = Host.query.filter_by(hostname=hostname, zone_id=zone.id).first()
+            if existing:
+                # Atualizar IP se diferente
+                if record.get('content') and existing.current_ip != record['content']:
+                    existing.current_ip = record['content']
+                continue
+
+            # Criar novo host com token
+            host = Host(
+                zone_id=zone.id,
+                hostname=hostname,
+                record_type=record.get('type', record_type),
+                ttl=record.get('ttl', 300),
+                auth_token=secrets.token_hex(16),
+                current_ip=record.get('content'),
+            )
+            db.session.add(host)
+            imported += 1
+
+    db.session.commit()
+    return imported
+
+
+# --- Rotas de Hosts (dentro de uma zona) ---
+
+@app.route('/zone/<int:zone_id>')
+@login_required
+def zone_detail(zone_id):
+    """Página de detalhes de uma zona — lista seus hosts/registros."""
+    zone = DnsZone.query.get_or_404(zone_id)
+    hosts = zone.hosts.all()
+    return render_template('zone_detail.html', zone=zone, hosts=hosts)
+
+
+@app.route('/zone/<int:zone_id>/add', methods=['POST'])
+@login_required
+def add_host(zone_id):
+    """Adiciona um novo host a uma zona."""
+    zone = DnsZone.query.get_or_404(zone_id)
+
+    hostname = request.form.get('hostname', '').strip().lower()
+    record_type = request.form.get('record_type', 'A')
+    ttl = int(request.form.get('ttl', 300))
+
+    if not hostname:
+        flash('O hostname é obrigatório.', 'error')
+        return redirect(url_for('zone_detail', zone_id=zone.id))
+
+    # Se o hostname não termina com o nome da zona, adiciona automaticamente
+    if not hostname.endswith(zone.name):
+        hostname = f"{hostname}.{zone.name}"
+
+    # Verificar duplicata
+    existing = Host.query.filter_by(hostname=hostname, zone_id=zone.id).first()
+    if existing:
+        flash(f'O host "{hostname}" já existe nesta zona.', 'error')
+        return redirect(url_for('zone_detail', zone_id=zone.id))
+
+    auth_token = secrets.token_hex(16)
+
+    host = Host(
+        zone_id=zone.id,
+        hostname=hostname,
+        record_type=record_type,
+        ttl=ttl,
+        auth_token=auth_token,
+    )
+    db.session.add(host)
+    db.session.commit()
+
+    flash(f'Host "{hostname}" adicionado com sucesso!', 'success')
+    return redirect(url_for('zone_detail', zone_id=zone.id))
+
+
+@app.route('/host/edit/<int:host_id>', methods=['POST'])
+@login_required
+def edit_host(host_id):
+    """Edita um host existente."""
+    host = Host.query.get_or_404(host_id)
+
+    host.hostname = request.form.get('hostname', '').strip().lower()
+    host.record_type = request.form.get('record_type')
+    host.ttl = int(request.form.get('ttl'))
+
+    db.session.commit()
+
+    flash(f'Host "{host.hostname}" atualizado com sucesso!', 'success')
+    return redirect(url_for('zone_detail', zone_id=host.zone_id))
+
+
+@app.route('/host/delete/<int:host_id>', methods=['POST'])
+@login_required
+def delete_host(host_id):
+    """Exclui um host."""
+    host = Host.query.get_or_404(host_id)
+    zone_id = host.zone_id
+    hostname = host.hostname
+
+    db.session.delete(host)
+    db.session.commit()
+
+    flash(f'Host "{hostname}" excluído com sucesso!', 'success')
+    return redirect(url_for('zone_detail', zone_id=zone_id))
 
 
 # --- Rotas de Configurações ---
@@ -151,78 +376,6 @@ def settings():
     )
 
 
-# --- Rotas CRUD de Hosts ---
-
-@app.route('/add', methods=['POST'])
-@login_required
-def add_host():
-    """Adiciona um novo host."""
-    hostname = request.form.get('hostname')
-    record_type = request.form.get('record_type', 'A')
-    ttl = int(request.form.get('ttl', 300))
-    provider = request.form.get('provider', 'cloudflare')
-
-    if not hostname:
-        flash('O nome do host é obrigatório.', 'error')
-        return redirect(url_for('index'))
-
-    # Validar provider
-    configured = get_configured_providers()
-    if provider not in configured:
-        flash(f'O provider "{provider}" não está configurado. Configure as credenciais em Configurações.', 'error')
-        return redirect(url_for('index'))
-
-    # Gera um token de autenticação seguro
-    auth_token = secrets.token_hex(16)
-
-    new_host = Host(
-        hostname=hostname,
-        record_type=record_type,
-        ttl=ttl,
-        auth_token=auth_token,
-        provider=provider,
-    )
-    db.session.add(new_host)
-    db.session.commit()
-
-    flash(f'Host {hostname} adicionado com sucesso (provider: {provider})!', 'success')
-    return redirect(url_for('index'))
-
-
-@app.route('/edit/<int:host_id>', methods=['POST'])
-@login_required
-def edit_host(host_id):
-    """Edita um host existente."""
-    host = Host.query.get_or_404(host_id)
-
-    host.hostname = request.form.get('hostname')
-    host.record_type = request.form.get('record_type')
-    host.ttl = int(request.form.get('ttl'))
-    host.provider = request.form.get('provider', host.provider)
-
-    # Validar provider
-    configured = get_configured_providers()
-    if host.provider not in configured:
-        flash(f'O provider "{host.provider}" não está configurado. Configure as credenciais em Configurações.', 'warning')
-
-    db.session.commit()
-
-    flash(f'Host {host.hostname} atualizado com sucesso!', 'success')
-    return redirect(url_for('index'))
-
-
-@app.route('/delete/<int:host_id>', methods=['POST'])
-@login_required
-def delete_host(host_id):
-    """Exclui um host."""
-    host = Host.query.get_or_404(host_id)
-    db.session.delete(host)
-    db.session.commit()
-
-    flash(f'Host {host.hostname} excluído com sucesso!', 'success')
-    return redirect(url_for('index'))
-
-
 # --- API Endpoints ---
 
 @app.route('/update', methods=['POST'])
@@ -249,9 +402,12 @@ def update_ip():
     if not host or not secrets.compare_digest(host.auth_token, token):
         return jsonify({"status": "error", "message": "Host não encontrado ou token inválido."}), 403
 
+    # Provider vem da zona
+    zone = host.zone
+
     try:
         # Instancia o provider correto via fábrica
-        provider = get_provider(host.provider)
+        provider = get_provider(zone.provider)
 
         # Verifica se o registro DNS já existe
         record = provider.get_dns_record(hostname, host.record_type)
@@ -259,7 +415,7 @@ def update_ip():
         if record:
             # Se o IP não mudou, não faz nada
             if record['content'] == ip_address:
-                return jsonify({"status": "success", "message": "IP já está atualizado.", "provider": host.provider}), 200
+                return jsonify({"status": "success", "message": "IP já está atualizado.", "provider": zone.provider}), 200
 
             # Atualiza o registro existente
             provider.update_dns_record(record['id'], host.hostname, ip_address, host.record_type, host.ttl)
@@ -275,8 +431,8 @@ def update_ip():
 
         return jsonify({
             "status": "success",
-            "message": f"IP do host {hostname} {action} para {ip_address} via {host.provider}.",
-            "provider": host.provider,
+            "message": f"IP do host {hostname} {action} para {ip_address} via {zone.provider}.",
+            "provider": zone.provider,
         }), 200
 
     except ProviderNotFoundError as e:
@@ -294,7 +450,8 @@ def get_status():
     status_data = [
         {
             "hostname": host.hostname,
-            "provider": host.provider,
+            "zone": host.zone.name,
+            "provider": host.zone.provider,
             "record_type": host.record_type,
             "current_ip": host.current_ip,
             "last_updated": host.last_updated.isoformat() if host.last_updated else None
@@ -305,17 +462,63 @@ def get_status():
 
 
 def run_migration():
-    """Executa migrations pendentes (adicionar coluna provider)."""
+    """Executa migrations pendentes."""
     try:
-        result = db.session.execute(db.text("SHOW COLUMNS FROM hosts LIKE 'provider'"))
+        # Create dns_zones table if not exists
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS dns_zones (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL UNIQUE,
+                provider VARCHAR(50) NOT NULL DEFAULT 'cloudflare',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+        # Add zone_id column to hosts if not exists
+        result = db.session.execute(db.text("SHOW COLUMNS FROM hosts LIKE 'zone_id'"))
         if not result.fetchone():
             db.session.execute(db.text(
-                "ALTER TABLE hosts ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'cloudflare' AFTER auth_token"
+                "ALTER TABLE hosts ADD COLUMN zone_id INT AFTER id"
             ))
-            db.session.commit()
-            print("Migration: coluna 'provider' adicionada à tabela 'hosts'.")
+
+            # Migrate existing data
+            try:
+                providers = db.session.execute(db.text(
+                    "SELECT DISTINCT provider FROM hosts WHERE provider IS NOT NULL"
+                )).fetchall()
+
+                for (prov,) in providers:
+                    zone_name = f"migrated-{prov}-zone"
+                    db.session.execute(db.text(
+                        f"INSERT IGNORE INTO dns_zones (name, provider) VALUES ('{zone_name}', '{prov}')"
+                    ))
+                    zone_row = db.session.execute(db.text(
+                        f"SELECT id FROM dns_zones WHERE name = '{zone_name}'"
+                    )).fetchone()
+                    if zone_row:
+                        db.session.execute(db.text(
+                            f"UPDATE hosts SET zone_id = {zone_row[0]} WHERE provider = '{prov}' AND zone_id IS NULL"
+                        ))
+            except Exception:
+                pass
+
+            try:
+                db.session.execute(db.text("ALTER TABLE hosts MODIFY COLUMN zone_id INT NOT NULL"))
+                db.session.execute(db.text(
+                    "ALTER TABLE hosts ADD CONSTRAINT fk_hosts_zone FOREIGN KEY (zone_id) REFERENCES dns_zones(id)"
+                ))
+            except Exception:
+                pass
+
+            try:
+                db.session.execute(db.text("ALTER TABLE hosts DROP COLUMN provider"))
+            except Exception:
+                pass
+
+        db.session.commit()
+        print("Migration: zonas verificadas/criadas com sucesso.")
     except Exception as e:
-        print(f"Migration: erro ou não necessária — {e}")
+        print(f"Migration: {e}")
 
 
 def create_initial_user():
