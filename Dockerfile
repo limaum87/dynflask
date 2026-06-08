@@ -16,4 +16,7 @@ EXPOSE 5000
 
 # Comando para rodar a aplicação em produção via Gunicorn (servidor WSGI).
 # NÃO use `python main.py` (servidor de desenvolvimento do Flask) em produção.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "60", "main:app"]
+# Inicializa schema/admin uma vez (single-process) antes de subir os workers,
+# evitando corrida de db.create_all() entre os múltiplos workers do gunicorn
+# (erro "Table ... already exists" em banco sem schema pré-criado).
+CMD ["sh", "-c", "python -c 'import main' && exec gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 60 main:app"]
