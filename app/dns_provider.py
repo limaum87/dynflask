@@ -11,6 +11,19 @@ class DNSProvider(ABC):
     """Classe abstrata que define o contrato para provedores de DNS."""
 
     @abstractmethod
+    def get_zone_info(self) -> dict:
+        """
+        Retorna informações da zona configurada no provider.
+
+        Returns:
+            dict com pelo menos:
+            - 'name': str (nome real da zona, ex: 'accept.inf.br')
+            - 'id': str (ID da zona no provider)
+            - 'record_count': int (total de registros, se disponível)
+        """
+        ...
+
+    @abstractmethod
     def list_dns_records(self, record_type: str = 'A') -> list[dict]:
         """
         Lista todos os registros DNS da zona para um dado tipo.

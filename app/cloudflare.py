@@ -26,6 +26,23 @@ class CloudflareProvider(DNSProvider):
             "Content-Type": "application/json",
         }
 
+    def get_zone_info(self) -> dict:
+        """Retorna informações da zona configurada no Cloudflare."""
+        headers = self._get_headers()
+        url = f"{CLOUDFLARE_API_URL}/zones/{self.zone_id}"
+
+        logger.info(f"[Cloudflare] Buscando info da zona {self.zone_id}")
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        result = response.json()["result"]
+        return {
+            'name': result.get('name', ''),
+            'id': result.get('id', ''),
+            'status': result.get('status', ''),
+            'record_count': result.get('meta', {}).get('custom_certificate_quota', 0),
+        }
+
     def list_dns_records(self, record_type: str = 'A') -> list[dict]:
         """Lista todos os registros DNS do tipo informado na zona do Cloudflare."""
         headers = self._get_headers()

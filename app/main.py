@@ -101,6 +101,26 @@ def add_zone():
         flash(f'A zona "{name}" já existe.', 'error')
         return redirect(url_for('index'))
 
+    # Validar zona contra o provider (warn se não bater)
+    try:
+        dns_provider = get_provider(provider)
+        zone_info = dns_provider.get_zone_info()
+        provider_zone_name = zone_info.get('name', '').rstrip('.').lower()
+        zone_name_clean = name.rstrip('.').lower()
+
+        if provider_zone_name and provider_zone_name != zone_name_clean:
+            # Verificar se a zona é subdomínio da Hosted Zone
+            if not zone_name_clean.endswith('.' + provider_zone_name):
+                flash(
+                    f'⚠️ A zona "{name}" não corresponde à zona do provider '
+                    f'"{provider_zone_name}" (ID: {zone_info.get("id", "?")}). '
+                    f'Os registros importados serão da Hosted Zone "{provider_zone_name}". '
+                    f'Se isso não estiver correto, ajuste as credenciais em Configurações.',
+                    'warning'
+                )
+    except Exception:
+        pass  # Se não conseguir verificar, continua normalmente
+
     zone = DnsZone(name=name, provider=provider)
     db.session.add(zone)
     db.session.commit()
@@ -469,6 +489,31 @@ def update_ip():
         return jsonify({"status": "error", "message": str(e)}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# --- API de Teste de Conexão ---
+
+@app.route('/api/test-provider/<provider_name>')
+@login_required
+def test_provider(provider_name):
+    """Testa a conexão com um provider de DNS e retorna info da zona."""
+    try:
+        provider = get_provider(provider_name)
+        zone_info = provider.get_zone_info()
+        return jsonify({
+            'status': 'success',
+            'provider': provider_name,
+            'zone_name': zone_info.get('name', ''),
+            'zone_id': zone_info.get('id', ''),
+            'record_count': zone_info.get('record_count', 0),
+            'comment': zone_info.get('comment', ''),
+        }), 200
+    except ProviderNotFoundError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except ProviderNotConfiguredError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/status', methods=['GET'])

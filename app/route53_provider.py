@@ -35,6 +35,30 @@ class Route53Provider(DNSProvider):
     def _strip_trailing_dot(self, hostname: str) -> str:
         return hostname.rstrip('.')
 
+    def get_zone_info(self) -> dict:
+        """Retorna informações da Hosted Zone configurada no Route53."""
+        logger.info(f"[Route53] Buscando info da Hosted Zone {self.hosted_zone_id}")
+        try:
+            response = self.client.get_hosted_zone(Id=self.hosted_zone_id)
+            zone = response['HostedZone']
+            name = self._strip_trailing_dot(zone.get('Name', ''))
+            record_count = zone.get('ResourceRecordSetCount', 0)
+            comment = zone.get('Config', {}).get('Comment', '')
+            return {
+                'name': name,
+                'id': zone.get('Id', '').split('/')[-1],
+                'status': 'active',
+                'record_count': record_count,
+                'comment': comment,
+            }
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_msg = e.response['Error']['Message']
+            logger.error(f"[Route53] Erro ao buscar info da zona ({error_code}): {error_msg}")
+            raise RuntimeError(f"Erro Route53 ({error_code}): {error_msg}") from e
+        except NoCredentialsError:
+            raise RuntimeError("Credenciais AWS inválidas ou não configuradas")
+
     def list_dns_records(self, record_type: str = 'A') -> list[dict]:
         """Lista todos os registros DNS do tipo informado na Hosted Zone."""
         logger.info(f"[Route53] Listando registros tipo {record_type}")

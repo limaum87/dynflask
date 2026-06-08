@@ -36,7 +36,8 @@ Este guia mostra como configurar o AWS Route53 como provider de DNS dinâmico no
       "Effect": "Allow",
       "Action": [
         "route53:ChangeResourceRecordSets",
-        "route53:ListResourceRecordSets"
+        "route53:ListResourceRecordSets",
+        "route53:GetHostedZone"
       ],
       "Resource": "arn:aws:route53:::hostedzone/SEU_HOSTED_ZONE_ID"
     }

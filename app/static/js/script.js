@@ -173,6 +173,66 @@ function togglePasswordVisibility(inputId, button) {
 }
 
 // ============================
+// Test Provider Connection
+// ============================
+
+function testProvider(provider) {
+  const resultEl = document.getElementById(`test-result-${provider}`);
+  if (!resultEl) return;
+
+  // Show loading
+  resultEl.classList.remove('hidden');
+  resultEl.innerHTML = `
+    <div class="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+      <svg class="h-4 w-4 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span class="text-sm font-medium text-blue-700">Testando conexão...</span>
+    </div>`;
+
+  fetch(`/api/test-provider/${provider}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        resultEl.innerHTML = `
+          <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 space-y-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="check-circle-2" class="h-4 w-4 text-emerald-600"></i>
+              <span class="text-sm font-semibold text-emerald-700">Conexão OK!</span>
+            </div>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-emerald-800">
+              <span class="text-emerald-600">Zona:</span>
+              <span class="font-mono font-semibold">${data.zone_name}</span>
+              <span class="text-emerald-600">Zone ID:</span>
+              <span class="font-mono">${data.zone_id}</span>
+              ${data.record_count !== undefined ? `<span class="text-emerald-600">Registros:</span><span>${data.record_count}</span>` : ''}
+              ${data.comment ? `<span class="text-emerald-600">Comentário:</span><span>${data.comment}</span>` : ''}
+            </div>
+          </div>`;
+      } else {
+        resultEl.innerHTML = `
+          <div class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <i data-lucide="x-circle" class="h-4 w-4 text-red-600 mt-0.5 shrink-0"></i>
+            <div>
+              <p class="text-sm font-semibold text-red-700">Falha na conexão</p>
+              <p class="text-[12px] text-red-600 mt-1">${data.message}</p>
+            </div>
+          </div>`;
+      }
+      lucide.createIcons();
+    })
+    .catch(err => {
+      resultEl.innerHTML = `
+        <div class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <i data-lucide="x-circle" class="h-4 w-4 text-red-600"></i>
+          <span class="text-sm text-red-700">Erro ao testar: ${err}</span>
+        </div>`;
+      lucide.createIcons();
+    });
+}
+
+// ============================
 // Auto-dismiss flash messages
 // ============================
 

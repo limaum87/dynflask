@@ -67,14 +67,21 @@
           </p>
         </div>
 
-        {# Save #}
-        <div class="border-t border-slate-100 pt-5">
+        {# Save + Test #}
+        <div class="border-t border-slate-100 pt-5 flex items-center gap-3 flex-wrap">
           <button type="submit"
             class="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 transition-colors">
             <i data-lucide="save" class="h-4 w-4"></i>
             Salvar Cloudflare
           </button>
+          <button type="button" onclick="testProvider('cloudflare')"
+            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            <i data-lucide="plug-zap" class="h-4 w-4"></i>
+            Testar Conexão
+          </button>
         </div>
+        {# Test result #}
+        <div id="test-result-cloudflare" class="mt-4 hidden"></div>
       </form>
     {% endcall %}
 
@@ -165,14 +172,21 @@
           </p>
         </div>
 
-        {# Save #}
-        <div class="border-t border-slate-100 pt-5">
+        {# Save + Test #}
+        <div class="border-t border-slate-100 pt-5 flex items-center gap-3 flex-wrap">
           <button type="submit"
             class="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors">
             <i data-lucide="save" class="h-4 w-4"></i>
             Salvar Route53
           </button>
+          <button type="button" onclick="testProvider('route53')"
+            class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            <i data-lucide="plug-zap" class="h-4 w-4"></i>
+            Testar Conexão
+          </button>
         </div>
+        {# Test result #}
+        <div id="test-result-route53" class="mt-4 hidden"></div>
       </form>
     {% endcall %}
   </div>
@@ -224,7 +238,8 @@
     "Effect": "Allow",
     "Action": [
       "route53:ChangeResourceRecordSets",
-      "route53:ListResourceRecordSets"
+      "route53:ListResourceRecordSets",
+      "route53:GetHostedZone"
     ],
     "Resource": "arn:aws:route53:::hostedzone/<span class=text-amber-400>ZONE_ID</span>"
   }]
