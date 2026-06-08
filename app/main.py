@@ -9,6 +9,7 @@ from provider_factory import get_provider, get_configured_providers, ProviderNot
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from security import encrypt_value, decrypt_value
 from werkzeug.middleware.proxy_fix import ProxyFix
+from sqlalchemy.exc import IntegrityError
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -607,18 +608,62 @@ def run_migration():
 
 
 def create_initial_user():
-    """Cria o usuário admin inicial se nenhum usuário existir."""
-    if User.query.first() is None:
-        admin_user = User(username='admin')
-        admin_user.set_password('admin')
-        db.session.add(admin_user)
+    """
+    Cria o usuário admin inicial se nenhum usuário existir.
+
+    A senha NUNCA é um valor fixo: ela vem da variável de ambiente
+    ADMIN_PASSWORD. Se não for definida, uma senha forte aleatória é
+    gerada e exibida UMA ÚNICA VEZ no log de inicialização — anote-a
+    e troque após o primeiro login.
+    """
+    if User.query.first() is not None:
+        return
+
+    username = os.getenv('ADMIN_USERNAME', 'admin')
+    password = os.getenv('ADMIN_PASSWORD')
+
+    generated = False
+    if not password:
+        password = secrets.token_urlsafe(16)
+        generated = True
+
+    admin_user = User(username=username)
+    admin_user.set_password(password)
+    db.session.add(admin_user)
+    try:
         db.session.commit()
-        print("Usuário 'admin' criado com a senha 'admin'.")
+    except IntegrityError:
+        # Corrida entre workers do Gunicorn: outro processo já criou o usuário.
+        db.session.rollback()
+        return
+
+    if generated:
+        logging.warning(
+            "\n" + "=" * 70 +
+            f"\n  Usuário inicial '{username}' criado com SENHA ALEATÓRIA:"
+            f"\n      {password}"
+            "\n  Anote agora — ela NÃO será exibida novamente."
+            "\n  Defina ADMIN_PASSWORD no .env para controlar a senha inicial."
+            "\n" + "=" * 70
+        )
+    else:
+        logging.info(f"Usuário inicial '{username}' criado com a senha definida em ADMIN_PASSWORD.")
 
 
-if __name__ == '__main__':
+def initialize():
+    """Prepara o banco (schema, migrations, usuário inicial). Idempotente."""
     with app.app_context():
         db.create_all()
         run_migration()
         create_initial_user()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+# Executa a inicialização ao carregar o módulo, para que também funcione
+# sob um servidor WSGI de produção (Gunicorn), não só com `python main.py`.
+initialize()
+
+
+if __name__ == '__main__':
+    # Apenas para desenvolvimento local. Em produção use Gunicorn (ver Dockerfile).
+    debug_enabled = os.getenv('FLASK_DEBUG', 'False').lower() in ('1', 'true', 'yes')
+    app.run(host='0.0.0.0', port=5000, debug=debug_enabled)

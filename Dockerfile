@@ -11,8 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia o restante da aplicação
 COPY ./app /app
 
-# Expõe a porta que o Flask irá rodar
+# Expõe a porta que a aplicação irá rodar
 EXPOSE 5000
 
-# Comando para rodar a aplicação
-CMD ["python", "main.py"]
+# Comando para rodar a aplicação em produção via Gunicorn (servidor WSGI).
+# NÃO use `python main.py` (servidor de desenvolvimento do Flask) em produção.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "60", "main:app"]
