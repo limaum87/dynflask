@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+{% from 'components/_card.html' import card %}
+{% from 'components/_empty_state.html' import empty_state %}
+
+{% block title %}Deploy — DynFlask{% endblock %}
+{% block page_title %}Deploy em Firewall{% endblock %}
+
+{% block content %}
+
+{# Flash messages #}
+{% include 'components/_flash_messages.html' %}
+
+<div class="mx-auto max-w-3xl space-y-8">
+
+  {# Chave SSH dedicada #}
+  {% call card(title='Chave SSH de Deploy', description='Par dedicado do DynFlask. A chave pública precisa estar autorizada no usuário root de cada firewall.', icon='key-round') %}
+    {% if pubkey %}
+      <p class="mb-2 text-sm font-medium text-slate-700">Chave pública (adicione em <span class="text-slate-500">System → User Manager → root → Authorized SSH Keys</span>):</p>
+      <div class="flex items-start gap-2">
+        <code class="block flex-1 overflow-x-auto rounded-lg bg-slate-950 px-4 py-3 text-[12px] font-mono leading-relaxed text-emerald-300 select-all">{{ pubkey }}</code>
+        <button type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent); this.querySelector('span').textContent='Copiado!'"
+          class="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+          <span>Copiar</span>
+        </button>
+      </div>
+      <form action="{{ url_for('deploy_generate_key') }}" method="POST" class="mt-4"
+        onsubmit="return confirm('Regenerar a chave invalida a chave pública atual em TODOS os firewalls que já a têm. Tem certeza?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="force" value="yes">
+        <button type="submit" class="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-[12px] font-medium text-red-600 hover:bg-red-50 transition-colors">
+          <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
+          Regenerar chave
+        </button>
+      </form>
+    {% else %}
+      <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Nenhuma chave de deploy configurada. Gere o par de chaves dedicado para começar.
+      </div>
+      <form action="{{ url_for('deploy_generate_key') }}" method="POST" class="mt-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-colors">
+          <i data-lucide="key-round" class="h-4 w-4"></i>
+          Gerar chave de deploy
+        </button>
+      </form>
+    {% endif %}
+  {% endcall %}
+
+  {# Formulário de deploy #}
+  {% call card(title='Implantar dyn2.sh + cron', description='Conecta no firewall pelo IP informado e instala o atualizador DDNS do host selecionado, executando-o e agendando o cron a cada 5 min.', icon='rocket') %}
+    {% if not hosts %}
+      {{ empty_state(icon='server', title='Nenhum host cadastrado', description='Crie ou sincronize registros em uma zona antes de fazer o deploy.') }}
+    {% else %}
+      <form action="{{ url_for('deploy_run') }}" method="POST" class="space-y-5">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div>
+          <label for="host_id" class="mb-1.5 block text-sm font-medium text-slate-700">Host (registro DNS)</label>
+          <select id="host_id" name="host_id" required
+            class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+            {% for h in hosts %}
+            <option value="{{ h.id }}">{{ h.hostname }} — {{ h.zone.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="mt-1 text-[11px] text-slate-400">O dyn2.sh usará o hostname e o token deste registro.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div class="sm:col-span-2">
+            <label for="ip" class="mb-1.5 block text-sm font-medium text-slate-700">IP do firewall</label>
+            <input type="text" id="ip" name="ip" required placeholder="Ex: 187.63.160.210"
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors">
+            <p class="mt-1 text-[11px] text-slate-400">Use o IP cru — no primeiro deploy o DDNS ainda não resolve.</p>
+          </div>
+          <div>
+            <label for="port" class="mb-1.5 block text-sm font-medium text-slate-700">Porta SSH</label>
+            <input type="number" id="port" name="port" value="2221" required
+              class="block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors">
+          </div>
+        </div>
+        <div>
+          <button type="submit" {{ '' if pubkey else 'disabled' }}
+            class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <i data-lucide="rocket" class="h-4 w-4"></i>
+            Fazer deploy
+          </button>
+          {% if not pubkey %}
+          <p class="mt-2 text-[12px] text-amber-600">Gere a chave de deploy acima antes de implantar.</p>
+          {% endif %}
+        </div>
+      </form>
+    {% endif %}
+  {% endcall %}
+
+</div>
+
+{% endblock %}

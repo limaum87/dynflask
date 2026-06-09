@@ -1,7 +1,9 @@
 
 import os
+import io
 import secrets
 import logging
+import paramiko
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, Response
 from dotenv import load_dotenv
 from models import db, DnsZone, Host, User, Setting
@@ -467,6 +469,165 @@ def settings():
         route53_aws_region=get_setting('ROUTE53_AWS_REGION') or 'us-east-1',
         configured_providers=get_configured_providers(),
     )
+
+
+# --- Deploy em firewalls (SSH) ---
+
+# PHP executado no pfSense para agendar /root/dyn2.sh a cada 5 min.
+# Usa services.inc (base do pfSense) — funciona mesmo sem o pacote Cron.
+_CRON_PHP = """<?php
+require_once("config.inc");
+require_once("services.inc");
+global $config;
+if (!is_array($config['cron'])) { $config['cron'] = array(); }
+if (!is_array($config['cron']['item'])) { $config['cron']['item'] = array(); }
+$cmd = '/root/dyn2.sh';
+foreach ($config['cron']['item'] as $item) {
+    if (isset($item['command']) && trim($item['command']) === $cmd) { echo "ALREADY_EXISTS\\n"; exit(0); }
+}
+$config['cron']['item'][] = array('minute'=>'*/5','hour'=>'*','mday'=>'*','month'=>'*','wday'=>'*','who'=>'root','command'=>$cmd);
+write_config("cron: adiciona dyn2.sh a cada 5 min");
+configure_cron();
+echo "ADDED\\n";
+"""
+
+
+def _build_dyn2_script(hostname: str, token: str, update_url: str) -> str:
+    """Monta o conteúdo do /root/dyn2.sh para um host específico."""
+    return (
+        "#!/bin/sh\n"
+        f"hostname={hostname}\n"
+        f"token={token}\n"
+        f"site={update_url}\n"
+        "\n"
+        "res=$(/usr/local/bin/curl -q --ipv4 -s -X POST \"$site\" \\\n"
+        "  -H 'Content-Type: application/json' \\\n"
+        "  -d '{\"hostname\": \"'\"$hostname\"'\", \"token\": \"'\"$token\"'\"}')\n"
+        "\n"
+        "echo $res\n"
+    )
+
+
+def _set_setting(key: str, value: str):
+    s = Setting.query.filter_by(key=key).first()
+    if not s:
+        s = Setting(key=key)
+    s.value = value
+    db.session.add(s)
+
+
+def _get_deploy_private_key():
+    s = Setting.query.filter_by(key='DEPLOY_SSH_PRIVATE_KEY').first()
+    return decrypt_value(s.value) if s and s.value else None
+
+
+def _get_deploy_public_key():
+    s = Setting.query.filter_by(key='DEPLOY_SSH_PUBLIC_KEY').first()
+    return s.value if s and s.value else None
+
+
+def _ssh_run(client, cmd: str, timeout: int = 30) -> str:
+    """Executa um comando via SSH e retorna stdout (+ stderr, se houver)."""
+    _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+    out = stdout.read().decode(errors='replace').strip()
+    err = stderr.read().decode(errors='replace').strip()
+    return (out + ("\n" + err if err else "")).strip()
+
+
+def _deploy_to_firewall(ip: str, port: int, host, update_url: str):
+    """
+    Conecta via SSH no firewall (IP cru), instala /root/dyn2.sh com o
+    hostname/token do host, executa-o e agenda o cron */5.
+    Retorna (saida_do_script, saida_do_cron).
+    """
+    priv = _get_deploy_private_key()
+    if not priv:
+        raise RuntimeError("Chave de deploy não configurada. Gere a chave nesta página primeiro.")
+
+    pkey = paramiko.RSAKey.from_private_key(io.StringIO(priv))
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        ip, port=port, username='root', pkey=pkey, look_for_keys=False, allow_agent=False,
+        timeout=15, banner_timeout=15, auth_timeout=15,
+    )
+    try:
+        sftp = client.open_sftp()
+        # 1) Grava o dyn2.sh
+        script = _build_dyn2_script(host.hostname, host.auth_token, update_url)
+        with sftp.file('/root/dyn2.sh', 'w') as f:
+            f.write(script)
+        sftp.chmod('/root/dyn2.sh', 0o755)
+        # 2) Executa
+        script_out = _ssh_run(client, '/root/dyn2.sh')
+        # 3) Agenda o cron */5
+        with sftp.file('/tmp/add_dyn2_cron.php', 'w') as f:
+            f.write(_CRON_PHP)
+        cron_out = _ssh_run(
+            client,
+            '/usr/local/bin/php /tmp/add_dyn2_cron.php; grep "/root/dyn2.sh" /etc/crontab; rm -f /tmp/add_dyn2_cron.php',
+        )
+        return script_out, cron_out
+    finally:
+        client.close()
+
+
+@app.route('/deploy')
+@login_required
+def deploy():
+    """Página para implantar o dyn2.sh + cron num firewall via SSH."""
+    hosts = Host.query.order_by(Host.hostname).all()
+    return render_template('deploy.html', hosts=hosts, pubkey=_get_deploy_public_key())
+
+
+@app.route('/deploy/generate-key', methods=['POST'])
+@login_required
+def deploy_generate_key():
+    """Gera o par de chaves dedicado do DynFlask (se ainda não existir)."""
+    existing = _get_deploy_private_key()
+    if existing and request.form.get('force') != 'yes':
+        flash('A chave de deploy já existe. Use "Regenerar" se quiser substituí-la.', 'warning')
+        return redirect(url_for('deploy'))
+
+    key = paramiko.RSAKey.generate(2048)
+    buf = io.StringIO()
+    key.write_private_key(buf)
+    priv = buf.getvalue()
+    pub = f"{key.get_name()} {key.get_base64()} dynflask-deploy"
+
+    _set_setting('DEPLOY_SSH_PRIVATE_KEY', encrypt_value(priv))
+    _set_setting('DEPLOY_SSH_PUBLIC_KEY', pub)
+    db.session.commit()
+
+    flash('Chave de deploy gerada. Adicione a chave pública abaixo ao usuário root dos firewalls.', 'success')
+    return redirect(url_for('deploy'))
+
+
+@app.route('/deploy/run', methods=['POST'])
+@login_required
+def deploy_run():
+    """Executa o deploy do dyn2.sh + cron no firewall informado."""
+    host = Host.query.get_or_404(int(request.form.get('host_id')))
+    ip = request.form.get('ip', '').strip()
+    try:
+        port = int(request.form.get('port', 2221))
+    except (TypeError, ValueError):
+        port = 2221
+
+    if not ip:
+        flash('Informe o IP do firewall.', 'error')
+        return redirect(url_for('deploy'))
+
+    update_url = request.host_url.rstrip('/') + '/update'
+
+    try:
+        script_out, cron_out = _deploy_to_firewall(ip, port, host, update_url)
+        flash(f'✅ {host.hostname} ({ip}:{port}) — dyn2.sh implantado e executado. Resposta: {script_out}', 'success')
+        flash(f'⏱️ Cron */5: {cron_out}', 'success' if 'dyn2.sh' in cron_out else 'warning')
+    except Exception as e:
+        flash(f'❌ Falha no deploy para {host.hostname} ({ip}:{port}): {e}', 'error')
+
+    return redirect(url_for('deploy'))
 
 
 # --- API Endpoints ---
