@@ -118,11 +118,18 @@
           <p class="mt-0.5 text-[12px] text-slate-500">{{ hosts | length }} registro{{ 's' if hosts | length != 1 }} em {{ zone.name }}</p>
         </div>
       </div>
-      <a href="{{ url_for('sync_zone', zone_id=zone.id) }}"
-        class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-        <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
-        Sincronizar
-      </a>
+      <div class="flex items-center gap-2">
+        <a href="{{ url_for('export_zone_tokens', zone_id=zone.id) }}"
+          class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+          <i data-lucide="download" class="h-3.5 w-3.5"></i>
+          Exportar tokens
+        </a>
+        <a href="{{ url_for('sync_zone', zone_id=zone.id) }}"
+          class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+          <i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i>
+          Sincronizar
+        </a>
+      </div>
     </div>
 
     <div class="overflow-x-auto">

@@ -2,7 +2,7 @@
 import os
 import secrets
 import logging
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, Response
 from dotenv import load_dotenv
 from models import db, DnsZone, Host, User, Setting
 from provider_factory import get_provider, get_configured_providers, ProviderNotFoundError, ProviderNotConfiguredError
@@ -301,6 +301,25 @@ def zone_detail(zone_id):
     zone = DnsZone.query.get_or_404(zone_id)
     hosts = zone.hosts.all()
     return render_template('zone_detail.html', zone=zone, hosts=hosts)
+
+
+@app.route('/zone/<int:zone_id>/export')
+@login_required
+def export_zone_tokens(zone_id):
+    """Exporta hostnames e tokens da zona em um arquivo .txt (uma linha por host)."""
+    zone = DnsZone.query.get_or_404(zone_id)
+    hosts = zone.hosts.order_by(Host.hostname).all()
+
+    lines = ["# hostname token", f"# zona: {zone.name} ({zone.provider}) — {len(hosts)} registro(s)"]
+    lines += [f"{host.hostname} {host.auth_token}" for host in hosts]
+    body = "\n".join(lines) + "\n"
+
+    filename = f"{zone.name}-tokens.txt"
+    return Response(
+        body,
+        mimetype='text/plain',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
 
 
 @app.route('/zone/<int:zone_id>/add', methods=['POST'])
