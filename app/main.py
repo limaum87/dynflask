@@ -318,6 +318,30 @@ def _sync_zone_records(zone: DnsZone) -> int:
     return imported
 
 
+def _publish_dns_record(zone: DnsZone, hostname: str, record_type: str, value: str, ttl: int) -> str:
+    """
+    Publica o registro no provider DNS da zona.
+
+    Retorna a ação executada: created, updated ou noop. Registros sem valor
+    são apenas cadastrados localmente para continuarem compatíveis com DDNS,
+    onde o primeiro /update define o IP real.
+    """
+    if not value:
+        return 'local-only'
+
+    provider = get_provider(zone.provider)
+    if record_type in ('MX', 'TXT'):
+        for record in provider.list_dns_records(record_type=record_type):
+            record_hostname = record.get('hostname', '').rstrip('.').lower()
+            if record_hostname == hostname.rstrip('.').lower() and record.get('content') == value:
+                return 'noop'
+        provider.create_dns_record(hostname, value, record_type, ttl)
+        return 'created'
+
+    result = provider.upsert_dns_record(hostname, value, record_type, ttl)
+    return result.get('action', 'updated')
+
+
 # --- Rotas de Hosts (dentro de uma zona) ---
 
 @app.route('/zone/<int:zone_id>')
@@ -397,10 +421,20 @@ def add_host(zone_id):
         auth_token=auth_token,
         current_ip=value,
     )
-    db.session.add(host)
-    db.session.commit()
 
-    flash(f'Host "{hostname}" adicionado com sucesso!', 'success')
+    try:
+        action = _publish_dns_record(zone, hostname, record_type, value, ttl)
+        db.session.add(host)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Falha ao publicar "{hostname}" no provider DNS: {e}', 'error')
+        return redirect(url_for('zone_detail', zone_id=zone.id))
+
+    if action == 'local-only':
+        flash(f'Registro "{hostname}" adicionado localmente. O primeiro update publicará o valor no DNS.', 'success')
+    else:
+        flash(f'Registro "{hostname}" adicionado e publicado no DNS ({action}).', 'success')
     return redirect(url_for('zone_detail', zone_id=zone.id))
 
 
@@ -409,6 +443,13 @@ def add_host(zone_id):
 def edit_host(host_id):
     """Edita um host existente."""
     host = Host.query.get_or_404(host_id)
+    zone = host.zone
+    original = {
+        'hostname': host.hostname,
+        'record_type': host.record_type,
+        'ttl': host.ttl,
+        'current_ip': host.current_ip,
+    }
 
     host.hostname = request.form.get('hostname', '').strip().lower()
     host.record_type = request.form.get('record_type')
@@ -419,9 +460,22 @@ def edit_host(host_id):
         flash(f'Tipo de registro "{host.record_type}" não é suportado.', 'error')
         return redirect(url_for('zone_detail', zone_id=host.zone_id))
 
-    db.session.commit()
+    try:
+        action = _publish_dns_record(zone, host.hostname, host.record_type, host.current_ip, host.ttl)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        host.hostname = original['hostname']
+        host.record_type = original['record_type']
+        host.ttl = original['ttl']
+        host.current_ip = original['current_ip']
+        flash(f'Falha ao publicar "{original["hostname"]}" no provider DNS: {e}', 'error')
+        return redirect(url_for('zone_detail', zone_id=host.zone_id))
 
-    flash(f'Host "{host.hostname}" atualizado com sucesso!', 'success')
+    if action == 'local-only':
+        flash(f'Registro "{host.hostname}" atualizado localmente.', 'success')
+    else:
+        flash(f'Registro "{host.hostname}" atualizado e publicado no DNS ({action}).', 'success')
     return redirect(url_for('zone_detail', zone_id=host.zone_id))
 
 

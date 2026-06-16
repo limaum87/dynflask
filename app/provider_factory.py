@@ -4,6 +4,7 @@ Retorna a instância correta do provider com base no nome e nas credenciais do b
 """
 
 from __future__ import annotations
+import os
 import logging
 from cloudflare import CloudflareProvider
 from route53_provider import Route53Provider
@@ -11,6 +12,13 @@ from models import Setting
 from security import decrypt_value
 
 logger = logging.getLogger(__name__)
+
+
+def _usable_env_value(key: str) -> str:
+    value = os.getenv(key, '').strip()
+    if not value or value.startswith('your_'):
+        return ''
+    return value
 
 
 class ProviderNotFoundError(Exception):
@@ -47,6 +55,12 @@ def get_provider(provider_name: str) -> CloudflareProvider | Route53Provider:
 
 def _get_cloudflare_provider() -> CloudflareProvider:
     """Cria instância do CloudflareProvider com credenciais do banco."""
+    env_zone_id = _usable_env_value('CLOUDFLARE_ZONE_ID')
+    env_api_token = _usable_env_value('CLOUDFLARE_API_TOKEN')
+    if env_zone_id and env_api_token:
+        logger.debug(f"[Factory] Instanciando CloudflareProvider via env (zone: {env_zone_id[:8]}...)")
+        return CloudflareProvider(zone_id=env_zone_id, api_token=env_api_token)
+
     zone_id_setting = Setting.query.filter_by(key='CLOUDFLARE_ZONE_ID').first()
     api_token_setting = Setting.query.filter_by(key='CLOUDFLARE_API_TOKEN').first()
 
@@ -116,9 +130,11 @@ def get_configured_providers() -> list[str]:
     configured = []
 
     # Cloudflare
+    cf_zone_env = _usable_env_value('CLOUDFLARE_ZONE_ID')
+    cf_token_env = _usable_env_value('CLOUDFLARE_API_TOKEN')
     cf_zone = Setting.query.filter_by(key='CLOUDFLARE_ZONE_ID').first()
     cf_token = Setting.query.filter_by(key='CLOUDFLARE_API_TOKEN').first()
-    if cf_zone and cf_zone.value and cf_token and cf_token.value:
+    if (cf_zone_env and cf_token_env) or (cf_zone and cf_zone.value and cf_token and cf_token.value):
         configured.append('cloudflare')
 
     # Route53
