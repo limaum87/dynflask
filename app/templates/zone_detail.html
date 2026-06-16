@@ -147,7 +147,11 @@
         </thead>
         <tbody class="divide-y divide-slate-100">
           {% for host in hosts %}
-          <tr class="hover:bg-slate-50/60 transition-colors">
+          <tr class="cursor-pointer hover:bg-slate-50/60 transition-colors"
+            data-api-hostname="{{ host.hostname }}"
+            data-api-token="{{ host.auth_token }}"
+            data-api-record-type="{{ host.record_type }}"
+            onclick="selectApiExampleRow(this)">
             <td class="px-6 py-3.5">
               <span class="text-sm font-medium text-slate-900">{{ host.hostname }}</span>
             </td>
@@ -177,12 +181,12 @@
             </td>
             <td class="px-6 py-3.5">
               <div class="flex items-center justify-end gap-1.5">
-                <button type="button" onclick='openEditModal({{ host.id }}, {{ host.hostname|tojson }}, {{ host.record_type|tojson }}, {{ host.ttl }}, {{ (host.current_ip or "")|tojson }})'
+                <button type="button" onclick='event.stopPropagation(); openEditModal({{ host.id }}, {{ host.hostname|tojson }}, {{ host.record_type|tojson }}, {{ host.ttl }}, {{ (host.current_ip or "")|tojson }})'
                   class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
                   <i data-lucide="pencil" class="h-3 w-3"></i>
                   <span class="hidden sm:inline">Editar</span>
                 </button>
-                <button type="button" onclick="openDeleteModal({{ host.id }}, '{{ host.hostname }}')"
+                <button type="button" onclick="event.stopPropagation(); openDeleteModal({{ host.id }}, '{{ host.hostname }}')"
                   class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
                   <i data-lucide="trash-2" class="h-3 w-3"></i>
                   <span class="hidden sm:inline">Excluir</span>
@@ -207,23 +211,28 @@
 
 {# API Usage card #}
 <div class="mt-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-  <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
-    <i data-lucide="terminal" class="h-4 w-4 text-emerald-500"></i>
-    Atualizar IP via API
-  </h3>
+  <div class="flex items-center justify-between gap-3">
+    <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+      <i data-lucide="terminal" class="h-4 w-4 text-emerald-500"></i>
+      Atualizar IP via API
+    </h3>
+    <button type="button" onclick="copyApiExample(this)"
+      class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+      <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+      Copiar
+    </button>
+  </div>
   <div class="mt-3 rounded-lg bg-slate-950 p-4">
-    <code class="block text-[12px] leading-relaxed text-slate-300">
-      <span class="text-emerald-400">curl</span> -X POST \<br>
-      &nbsp;&nbsp;{{ request.host_url }}<span class="text-amber-400">update</span> \<br>
-      &nbsp;&nbsp;-H <span class="text-amber-400">"Content-Type: application/json"</span> \<br>
-      &nbsp;&nbsp;-d <span class="text-amber-400">'{</span><br>
-      &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-blue-400">"hostname"</span>: <span class="text-amber-400">"home.{{ zone.name }}"</span>,<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-blue-400">"token"</span>: <span class="text-amber-400">"TOKEN_DO_HOST"</span><br>
-      &nbsp;&nbsp;<span class="text-amber-400">}'</span>
-    </code>
+    <pre id="api-example" data-update-url="{{ request.host_url }}update" class="whitespace-pre-wrap break-all text-[12px] leading-relaxed text-slate-300">curl -X POST {{ request.host_url }}update \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "home.{{ zone.name }}",
+    "record_type": "A",
+    "token": "TOKEN_DO_HOST"
+  }'</pre>
   </div>
   <p class="mt-2 text-[12px] text-slate-500">
-    Se <code class="rounded bg-slate-100 px-1 py-0.5 text-[11px]">ip</code> não for enviado, o IP de origem será usado. Provider: <strong>{{ zone.provider }}</strong>
+    Clique em uma linha da tabela para preencher o exemplo. Se <code class="rounded bg-slate-100 px-1 py-0.5 text-[11px]">ip</code> não for enviado, o IP de origem será usado. Provider: <strong>{{ zone.provider }}</strong>
   </p>
 </div>
 

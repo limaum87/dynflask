@@ -156,6 +156,44 @@ function copyToken(token, element) {
   });
 }
 
+function selectApiExampleRow(row) {
+  const example = document.getElementById('api-example');
+  if (!example || !row) return;
+
+  const hostname = row.dataset.apiHostname;
+  const token = row.dataset.apiToken;
+  const recordType = row.dataset.apiRecordType || 'A';
+  const updateUrl = example.dataset.updateUrl;
+
+  document.querySelectorAll('[data-api-hostname]').forEach((el) => {
+    el.classList.remove('bg-blue-50');
+  });
+  row.classList.add('bg-blue-50');
+
+  example.textContent = `curl -X POST ${updateUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "hostname": "${hostname}",
+    "record_type": "${recordType}",
+    "token": "${token}"
+  }'`;
+}
+
+function copyApiExample(button) {
+  const example = document.getElementById('api-example');
+  if (!example) return;
+
+  navigator.clipboard.writeText(example.textContent).then(() => {
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<i data-lucide="check" class="h-3.5 w-3.5 text-emerald-500"></i>Copiado';
+    lucide.createIcons();
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+      lucide.createIcons();
+    }, 2000);
+  });
+}
+
 // ============================
 // Password visibility toggle
 // ============================
