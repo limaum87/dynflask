@@ -26,6 +26,32 @@ class CloudflareProvider(DNSProvider):
             "Content-Type": "application/json",
         }
 
+    def _format_content(self, record: dict) -> str:
+        """Normaliza registros que possuem metadados extras no Cloudflare."""
+        if record.get('type') == 'MX':
+            return f"{record.get('priority', 10)} {record.get('content', '')}".strip()
+        return record.get('content', '')
+
+    def _build_payload(self, hostname: str, value: str, record_type: str, ttl: int) -> dict:
+        data = {
+            "type": record_type,
+            "name": hostname,
+            "content": value,
+            "ttl": ttl,
+        }
+
+        if record_type == 'MX':
+            parts = value.split(None, 1)
+            if len(parts) == 2 and parts[0].isdigit():
+                data["priority"] = int(parts[0])
+                data["content"] = parts[1].rstrip('.')
+            else:
+                data["priority"] = 10
+        elif record_type in ('A', 'AAAA', 'CNAME'):
+            data["proxied"] = False
+
+        return data
+
     def get_zone_info(self) -> dict:
         """Retorna informações da zona configurada no Cloudflare."""
         headers = self._get_headers()
@@ -58,7 +84,7 @@ class CloudflareProvider(DNSProvider):
             result.append({
                 'hostname': r['name'],
                 'type': r['type'],
-                'content': r['content'],
+                'content': self._format_content(r),
                 'ttl': r['ttl'],
                 'id': r['id'],
             })
@@ -77,8 +103,9 @@ class CloudflareProvider(DNSProvider):
         records = response.json()["result"]
         if records:
             record = records[0]
-            logger.debug(f"[Cloudflare] Registro encontrado: {record['id']} -> {record['content']}")
-            return {'id': record['id'], 'content': record['content']}
+            content = self._format_content(record)
+            logger.debug(f"[Cloudflare] Registro encontrado: {record['id']} -> {content}")
+            return {'id': record['id'], 'content': content}
 
         logger.debug(f"[Cloudflare] Nenhum registro encontrado para {hostname}")
         return None
@@ -87,13 +114,7 @@ class CloudflareProvider(DNSProvider):
         """Cria um novo registro DNS no Cloudflare."""
         headers = self._get_headers()
         url = f"{CLOUDFLARE_API_URL}/zones/{self.zone_id}/dns_records"
-        data = {
-            "type": record_type,
-            "name": hostname,
-            "content": ip_address,
-            "ttl": ttl,
-            "proxied": False,
-        }
+        data = self._build_payload(hostname, ip_address, record_type, ttl)
 
         logger.info(f"[Cloudflare] Criando registro: {hostname} -> {ip_address} ({record_type}, TTL={ttl})")
         response = requests.post(url, headers=headers, json=data)
@@ -107,13 +128,7 @@ class CloudflareProvider(DNSProvider):
         """Atualiza um registro DNS existente no Cloudflare."""
         headers = self._get_headers()
         url = f"{CLOUDFLARE_API_URL}/zones/{self.zone_id}/dns_records/{record_id}"
-        data = {
-            "type": record_type,
-            "name": hostname,
-            "content": ip_address,
-            "ttl": ttl,
-            "proxied": False,
-        }
+        data = self._build_payload(hostname, ip_address, record_type, ttl)
 
         logger.info(f"[Cloudflare] Atualizando registro {record_id}: {hostname} -> {ip_address}")
         response = requests.put(url, headers=headers, json=data)

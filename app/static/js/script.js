@@ -96,18 +96,20 @@ function openDeleteZoneModal(zoneId, name) {
 // Host Modals
 // ============================
 
-function openEditModal(hostId, hostname, recordType, ttl) {
+function openEditModal(hostId, hostname, recordType, ttl, value = '') {
   const form = document.getElementById('edit-form');
   const hostnameInput = document.getElementById('edit-hostname');
   const recordTypeSelect = document.getElementById('edit-record-type');
   const ttlInput = document.getElementById('edit-ttl');
+  const valueInput = document.getElementById('edit-value');
 
-  if (!form || !hostnameInput || !recordTypeSelect || !ttlInput) return;
+  if (!form || !hostnameInput || !recordTypeSelect || !ttlInput || !valueInput) return;
 
   form.action = `/host/edit/${hostId}`;
   hostnameInput.value = hostname;
   recordTypeSelect.value = recordType;
   ttlInput.value = ttl;
+  valueInput.value = value;
   openModal('edit-modal');
 }
 

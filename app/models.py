@@ -40,7 +40,7 @@ class Host(db.Model):
     record_type = db.Column(db.String(10), nullable=False, default='A')
     ttl = db.Column(db.Integer, nullable=False, default=300)
     auth_token = db.Column(db.String(255), nullable=False)
-    current_ip = db.Column(db.String(45))
+    current_ip = db.Column(db.Text)
     last_updated = db.Column(db.TIMESTAMP, server_default=db.func.now(), onupdate=db.func.now())
 
     def __repr__(self):

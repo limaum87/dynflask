@@ -17,6 +17,8 @@ from sqlalchemy.exc import IntegrityError
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
+DNS_RECORD_TYPES = ('A', 'AAAA', 'CNAME', 'MX', 'TXT')
+
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
 
@@ -228,10 +230,22 @@ def _sync_zone_records(zone: DnsZone) -> int:
     e associamos à zona do DynFlask.
     """
     provider = get_provider(zone.provider)
+    zone_name = zone.name.rstrip('.').lower()
+    provider_zone_name = ''
+    try:
+        provider_zone_name = provider.get_zone_info().get('name', '').rstrip('.').lower()
+    except Exception as e:
+        logging.warning(f"Não foi possível obter nome da zona do provider durante sync: {e}")
+
+    child_zone_names = [
+        child.name.rstrip('.').lower()
+        for child in DnsZone.query.filter(DnsZone.id != zone.id).all()
+        if child.name.rstrip('.').lower().endswith('.' + zone_name)
+    ]
 
     imported = 0
     skipped = 0
-    for record_type in ('A', 'AAAA'):
+    for record_type in DNS_RECORD_TYPES:
         try:
             records = provider.list_dns_records(record_type=record_type)
         except Exception as e:
@@ -244,35 +258,45 @@ def _sync_zone_records(zone: DnsZone) -> int:
             if not hostname:
                 continue
 
-            # Detectar o domínio base da Hosted Zone a partir dos registros.
-            # Se a zona é 'dyn.accept.inf.br' mas os registros são 'foo.accept.inf.br',
-            # significa que a Hosted Zone é 'accept.inf.br' — importar tudo.
-            # Se os registros terminam com o nome da zona exato, filtrar normalmente.
-            zone_name = zone.name.rstrip('.').lower()
             hostname_matches_zone = hostname == zone_name or hostname.endswith('.' + zone_name)
-
             if not hostname_matches_zone:
-                # Tentar matching reverso: verificar se algum sufixo do hostname
-                # corresponde à zona (ex: zona='dyn.accept.inf.br' e hostname='foo.accept.inf.br')
-                # Neste caso, o domínio base é 'accept.inf.br' — importar todos
-                # que terminam com esse domínio base
-                parts = zone_name.split('.')
-                matched_parent = False
-                for i in range(len(parts)):
-                    parent = '.'.join(parts[i:])
-                    if hostname.endswith('.' + parent) or hostname == parent:
-                        matched_parent = True
-                        break
-                if not matched_parent:
-                    skipped += 1
-                    continue
+                skipped += 1
+                continue
 
-            # Verificar se já existe
-            existing = Host.query.filter_by(hostname=hostname, zone_id=zone.id).first()
+            # Quando a zona lógica é a zona raiz (ex: accept.inf.br) e existe
+            # uma subzona lógica (ex: dyn.accept.inf.br), mantém a separação
+            # visual/operacional no DynFlask.
+            if provider_zone_name == zone_name and any(
+                hostname == child_zone or hostname.endswith('.' + child_zone)
+                for child_zone in child_zone_names
+            ):
+                skipped += 1
+                continue
+
+            exact_existing = Host.query.filter_by(
+                hostname=hostname,
+                zone_id=zone.id,
+                record_type=record.get('type', record_type),
+                current_ip=record.get('content'),
+            ).first()
+            if exact_existing:
+                if record.get('ttl') and exact_existing.ttl != record['ttl']:
+                    exact_existing.ttl = record['ttl']
+                continue
+
+            existing = None
+            if record_type in ('A', 'AAAA', 'CNAME'):
+                existing = Host.query.filter_by(
+                    hostname=hostname,
+                    zone_id=zone.id,
+                    record_type=record.get('type', record_type),
+                ).first()
             if existing:
-                # Atualizar IP se diferente
+                # Atualizar valor/TTL se diferente.
                 if record.get('content') and existing.current_ip != record['content']:
                     existing.current_ip = record['content']
+                if record.get('ttl') and existing.ttl != record['ttl']:
+                    existing.ttl = record['ttl']
                 continue
 
             logging.info(f"[Sync] Importando: {hostname} -> {record.get('content')} ({record_type})")
@@ -302,7 +326,7 @@ def zone_detail(zone_id):
     """Página de detalhes de uma zona — lista seus hosts/registros."""
     zone = DnsZone.query.get_or_404(zone_id)
     hosts = zone.hosts.all()
-    return render_template('zone_detail.html', zone=zone, hosts=hosts)
+    return render_template('zone_detail.html', zone=zone, hosts=hosts, record_types=DNS_RECORD_TYPES)
 
 
 @app.route('/zone/<int:zone_id>/export')
@@ -333,7 +357,7 @@ def add_host(zone_id):
     hostname = request.form.get('hostname', '').strip().lower()
     record_type = request.form.get('record_type', 'A')
     ttl = int(request.form.get('ttl', 300))
-    ip = request.form.get('ip', '').strip() or None
+    value = request.form.get('value', request.form.get('ip', '')).strip() or None
 
     if not hostname:
         flash('O hostname é obrigatório.', 'error')
@@ -343,10 +367,24 @@ def add_host(zone_id):
     if not hostname.endswith(zone.name):
         hostname = f"{hostname}.{zone.name}"
 
-    # Verificar duplicata
-    existing = Host.query.filter_by(hostname=hostname, zone_id=zone.id).first()
+    if record_type not in DNS_RECORD_TYPES:
+        flash(f'Tipo de registro "{record_type}" não é suportado.', 'error')
+        return redirect(url_for('zone_detail', zone_id=zone.id))
+
+    if record_type not in ('A', 'AAAA') and not value:
+        flash(f'O valor é obrigatório para registros {record_type}.', 'error')
+        return redirect(url_for('zone_detail', zone_id=zone.id))
+
+    # Verificar duplicata exata. Registros como TXT/MX podem repetir hostname/tipo
+    # com valores diferentes.
+    existing = Host.query.filter_by(
+        hostname=hostname,
+        zone_id=zone.id,
+        record_type=record_type,
+        current_ip=value,
+    ).first()
     if existing:
-        flash(f'O host "{hostname}" já existe nesta zona.', 'error')
+        flash(f'O registro "{hostname}" ({record_type}) já existe nesta zona.', 'error')
         return redirect(url_for('zone_detail', zone_id=zone.id))
 
     auth_token = secrets.token_hex(16)
@@ -357,7 +395,7 @@ def add_host(zone_id):
         record_type=record_type,
         ttl=ttl,
         auth_token=auth_token,
-        current_ip=ip,
+        current_ip=value,
     )
     db.session.add(host)
     db.session.commit()
@@ -375,6 +413,11 @@ def edit_host(host_id):
     host.hostname = request.form.get('hostname', '').strip().lower()
     host.record_type = request.form.get('record_type')
     host.ttl = int(request.form.get('ttl'))
+    host.current_ip = request.form.get('value', '').strip() or None
+
+    if host.record_type not in DNS_RECORD_TYPES:
+        flash(f'Tipo de registro "{host.record_type}" não é suportado.', 'error')
+        return redirect(url_for('zone_detail', zone_id=host.zone_id))
 
     db.session.commit()
 
@@ -648,13 +691,18 @@ def update_ip():
 
     hostname = data.get('hostname')
     token = data.get('token')
+    record_type = data.get('record_type')
     ip_address = data.get('ip', request.remote_addr)
 
     if not all([hostname, token]):
         return jsonify({"status": "error", "message": "Parâmetros 'hostname' e 'token' são obrigatórios."}), 400
 
-    # Busca o host no banco de dados
-    host = Host.query.filter_by(hostname=hostname).first()
+    # Busca o host no banco de dados. record_type é opcional por compatibilidade
+    # com clientes DDNS antigos, mas deve ser enviado se houver mais de um tipo.
+    query = Host.query.filter_by(hostname=hostname)
+    if record_type:
+        query = query.filter_by(record_type=record_type)
+    host = query.first()
 
     if not host or not secrets.compare_digest(host.auth_token, token):
         return jsonify({"status": "error", "message": "Host não encontrado ou token inválido."}), 403
@@ -797,6 +845,18 @@ def run_migration():
                 db.session.execute(db.text("ALTER TABLE hosts DROP COLUMN provider"))
             except Exception:
                 pass
+
+        try:
+            db.session.execute(db.text("ALTER TABLE hosts MODIFY COLUMN current_ip TEXT"))
+        except Exception:
+            pass
+
+        try:
+            indexes = db.session.execute(db.text("SHOW INDEX FROM hosts WHERE Key_name = 'hostname'")).fetchall()
+            if indexes:
+                db.session.execute(db.text("ALTER TABLE hosts DROP INDEX hostname"))
+        except Exception:
+            pass
 
         db.session.commit()
         print("Migration: zonas verificadas/criadas com sucesso.")
